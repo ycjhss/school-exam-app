@@ -27,18 +27,18 @@ const appId = String(rawAppId).split('/')[0];
 
 const defaultChecklistData = [
   { id: 1, type: 'category', text: '1. 시험 문제 출제 원칙' },
-  { id: 2, type: 'item1', text: '가. 교육 과정에 근거한 출제' },
-  { id: 3, type: 'item1', text: '나. 동 교과협의회를 통한 공동 출제' },
-  { id: 4, type: 'item2', text: '1) 성취 기준 및 성취 수준에 맞는 출제' },
-  { id: 5, type: 'item2', text: '2) 논술형 평가 문항 채점기준표 작성' },
-  { id: 6, type: 'item1', text: '다. 예상 평균 점수 적합성 확인' },
+  { id: 2, type: 'item1', text: '가. 교육 과정에 근거한 출제', status: 'O' },
+  { id: 3, type: 'item1', text: '나. 동 교과협의회를 통한 공동 출제', status: 'O' },
+  { id: 4, type: 'item2', text: '1) 성취 기준 및 성취 수준에 맞는 출제', status: 'O' },
+  { id: 5, type: 'item2', text: '2) 논술형 평가 문항 채점기준표 작성', status: 'O' },
+  { id: 6, type: 'item1', text: '다. 예상 평균 점수 적합성 확인', status: 'O' },
   { id: 8, type: 'category', text: '2. 문항 출제 시 고려 사항' },
-  { id: 9, type: 'item2', text: '1) 시판 참고서 문제와의 일치 여부' },
-  { id: 10, type: 'item2', text: '2) 과년도 기출 문제와의 일치 여부' },
-  { id: 12, type: 'item2', text: '3) 선행 출제 여부 동교과 상호 확인' }
+  { id: 9, type: 'item2', text: '1) 시판 참고서 문제와의 일치 여부', status: 'O' },
+  { id: 10, type: 'item2', text: '2) 과년도 기출 문제와의 일치 여부', status: 'O' },
+  { id: 12, type: 'item2', text: '3) 선행 출제 여부 동교과 상호 확인', status: 'O' }
 ];
 
-// 요일 및 시간 포맷팅 함수 (예: 26. 4. 28. (화) 14:30)
+// 요일 및 시간 포맷팅 함수
 const formatDateTime = (isoString) => {
   if (!isoString) return '';
   const date = new Date(isoString);
@@ -140,7 +140,7 @@ export default function App() {
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
 
-  // 💡 선택된 서명의 전체 공문서 출력용 팝업 상태 (기존 selectedSigImage 대체)
+  // 선택된 서명의 전체 공문서 출력용 팝업 상태
   const [selectedSubmission, setSelectedSubmission] = useState(null);
 
   const defaultGlobalSettings = {
@@ -212,7 +212,7 @@ export default function App() {
 
   // 3. 서명 데이터 및 출력 상태 불러오기
   useEffect(() => {
-    if (!user || (viewMode !== 'status' && viewMode !== 'admin')) return;
+    if (!user) return;
     
     const unsubSigs = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'individualSignatures'), 
       (snap) => {
@@ -231,7 +231,7 @@ export default function App() {
     );
 
     return () => { unsubSigs(); unsubPrints(); };
-  }, [user, viewMode]);
+  }, [user]);
 
   const handleUnlock = (e) => {
     e.preventDefault();
@@ -255,10 +255,10 @@ export default function App() {
         subject: selectedSubject, teacherName: selectedTeacher, signatureData, createdAt: serverTimestamp(), uid: user.uid
       });
       setSaveSuccess(true); setSelectedTeacher(''); setSignatureData(null); setResetSigCounter(c => c+1);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      setTimeout(() => { setSaveSuccess(false); setSelectedSubject(''); }, 3000);
     } catch (e) { 
       setSaveSuccess(true); setSelectedTeacher(''); setSignatureData(null); setResetSigCounter(c => c+1);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      setTimeout(() => { setSaveSuccess(false); setSelectedSubject(''); }, 3000);
     }
     setIsSaving(false);
   };
@@ -328,6 +328,7 @@ export default function App() {
     }
   };
 
+  // 관리자 설정 함수들
   const addSubject = () => {
     if(!newSubject.trim()) return;
     setAdminData(prev => ({ ...prev, subjects: [...prev.subjects, { name: newSubject.trim(), teachers: [] }] }));
@@ -347,20 +348,36 @@ export default function App() {
   };
   const addChecklistItem = () => {
     if(!newChecklistText.trim()) return;
-    const newItem = { id: Date.now(), type: newChecklistType, text: newChecklistText.trim() };
+    const newItem = { id: Date.now(), type: newChecklistType, text: newChecklistText.trim(), status: 'O' };
     setAdminData(prev => ({ ...prev, checklist: [...(prev.checklist || defaultChecklistData), newItem] }));
     setNewChecklistText('');
   };
   const removeChecklistItem = (id) => {
     setAdminData(prev => ({ ...prev, checklist: (prev.checklist || defaultChecklistData).filter(item => item.id !== id) }));
   };
+  
+  // 💡 관리자 O/X 변경 함수
+  const updateChecklistStatus = (id, newStatus) => {
+    setAdminData(prev => ({
+      ...prev,
+      checklist: (prev.checklist || defaultChecklistData).map(item =>
+        item.id === id ? { ...item, status: newStatus } : item
+      )
+    }));
+  };
 
+  // 기본 파생 데이터
   const safeSubjects = Array.isArray(globalSettings.subjects) ? globalSettings.subjects : [];
   const safeTeachers = safeSubjects.find(s => s.name === selectedSubject)?.teachers || [];
   const currentChecklist = globalSettings.checklist || defaultChecklistData;
   const currentExamSignatures = allSignatures.filter(s => 
     s.year === String(globalSettings.year) && s.semester === String(globalSettings.semester) && s.examOrder === String(globalSettings.examOrder)
   );
+
+  // 💡 교사용 제출 명단 필터링 (이미 제출한 사람은 드롭다운에서 숨김)
+  const subjectSignaturesForTeacherView = currentExamSignatures.filter(s => s.subject === selectedSubject);
+  const submittedNamesForSelectedSubject = subjectSignaturesForTeacherView.map(s => s.teacherName);
+  const availableTeachers = safeTeachers.filter(t => !submittedNamesForSelectedSubject.includes(t));
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-100 selection:bg-blue-100 font-sans">
@@ -392,8 +409,9 @@ export default function App() {
                         {item.text}
                       </span>
                       {item.type !== 'category' && (
-                        <span className="font-black shrink-0 whitespace-nowrap tracking-widest">
-                          ( O ) &nbsp; ( X )
+                        <span className="font-black shrink-0 flex items-center gap-4 text-xl">
+                          <span className={`w-10 h-10 flex items-center justify-center rounded-full ${(item.status !== 'X') ? 'border-[3px] border-black' : 'text-gray-400 font-medium'}`}>O</span>
+                          <span className={`w-10 h-10 flex items-center justify-center rounded-full ${(item.status === 'X') ? 'border-[3px] border-black' : 'text-gray-400 font-medium'}`}>X</span>
                         </span>
                       )}
                     </li>
@@ -428,7 +446,6 @@ export default function App() {
         </div>
       )}
 
-      {/* 헤더 및 메인 영역: 서명 팝업이 열려 있을 때는 인쇄되지 않도록 감싸줍니다. */}
       <div className={`${selectedSubmission ? 'print:hidden' : ''} flex flex-col flex-1`}>
         <header className="bg-white/90 backdrop-blur-md sticky top-0 z-10 border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm print:hidden">
           <div className="flex items-center gap-3">
@@ -446,6 +463,7 @@ export default function App() {
 
         <main className="flex-1 flex flex-col items-center justify-start p-4 md:p-8 animate-fade-in relative z-0 print:p-0">
           
+          {/* 비밀번호 확인 화면 */}
           {(viewMode === 'status' || viewMode === 'admin') && !isUnlocked && (
             <div className="w-full max-w-sm bg-white rounded-[2rem] shadow-xl p-8 mt-12 animate-fade-in text-center border border-gray-100 print:hidden">
               <div className="bg-blue-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -471,6 +489,7 @@ export default function App() {
             </div>
           )}
 
+          {/* 1. 교사 서명 화면 */}
           {viewMode === 'teacher' && (
             <div className="w-full max-w-md bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] overflow-hidden border border-white relative mt-4">
               <div className="bg-gradient-to-br from-blue-600 to-blue-800 text-white p-8 text-center relative overflow-hidden">
@@ -493,21 +512,21 @@ export default function App() {
                   <div className="border border-gray-200 rounded-2xl h-64 flex flex-col bg-white overflow-hidden shadow-sm">
                     <div className="bg-blue-50/50 p-3 border-b border-gray-200 shrink-0 z-10">
                       <p className="text-xs font-black text-blue-700 text-center">
-                        아래 항목을 모두 확인했습니다.
+                        관리자가 확인한 아래 항목을 숙지했습니다.
                       </p>
                     </div>
                     <div className="p-4 overflow-y-auto custom-scrollbar flex-1 bg-gray-50">
-                      {/* 💡 교사 뷰에서도 [O] [X] 디자인 반영 */}
                       <ul className="space-y-3 text-sm text-gray-600">
                         {currentChecklist.map(item => (
                           <li key={item.id} className={`flex justify-between items-start ${item.type === 'category' ? 'font-black text-gray-800 mt-5 border-b border-gray-200 pb-1 text-base' : 'pl-2 mt-2'}`}>
                             <span className={item.type === 'category' ? '' : 'relative before:content-["-"] before:absolute before:-left-2 before:text-gray-400 pl-2 pr-4 flex-1 leading-tight'}>
                               {item.text}
                             </span>
+                            {/* 💡 교사 화면 읽기 전용 [O] [X] 디자인 */}
                             {item.type !== 'category' && (
                               <span className="flex gap-1.5 shrink-0 mt-0.5">
-                                <span className="w-5 h-5 flex items-center justify-center rounded border border-blue-500 bg-blue-50 text-blue-600 font-black text-[10px]">O</span>
-                                <span className="w-5 h-5 flex items-center justify-center rounded border border-gray-200 text-gray-300 font-bold text-[10px]">X</span>
+                                <span className={`w-5 h-5 flex items-center justify-center rounded border ${(item.status !== 'X') ? 'border-blue-500 bg-blue-50 text-blue-600 font-black' : 'border-gray-200 text-gray-300 font-bold'} text-[10px]`}>O</span>
+                                <span className={`w-5 h-5 flex items-center justify-center rounded border ${(item.status === 'X') ? 'border-red-500 bg-red-50 text-red-600 font-black' : 'border-gray-200 text-gray-300 font-bold'} text-[10px]`}>X</span>
                               </span>
                             )}
                           </li>
@@ -526,14 +545,24 @@ export default function App() {
                       <div className="absolute right-4 bottom-4 pointer-events-none opacity-30"><Search size={18}/></div>
                     </div>
 
-                    {selectedSubject && (
+                    {/* 💡 선택된 과목에 제출 가능한 교사가 있을 때만 이름 선택창 표시 */}
+                    {selectedSubject && availableTeachers.length > 0 && (
                       <div className="animate-fade-in relative group">
                         <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1">Teacher</label>
                         <select value={selectedTeacher} onChange={e=>setSelectedTeacher(e.target.value)} className="w-full p-4 bg-blue-50/50 border-2 border-blue-100 rounded-2xl text-base font-bold text-blue-800 focus:border-blue-500 focus:bg-white transition-all appearance-none outline-none shadow-sm" required>
                           <option value="">성함을 선택하세요</option>
-                          {Array.isArray(safeTeachers) && safeTeachers.map(t=><option key={t} value={t}>{t}</option>)}
+                          {availableTeachers.map(t=><option key={t} value={t}>{t}</option>)}
                         </select>
                         <div className="absolute right-4 bottom-4 pointer-events-none opacity-30"><Users size={18}/></div>
+                      </div>
+                    )}
+
+                    {/* 💡 해당 과목의 모든 교사가 제출을 마쳤을 때 안내 문구 표시 */}
+                    {selectedSubject && availableTeachers.length === 0 && (
+                      <div className="animate-fade-in p-4 bg-emerald-50 border-2 border-emerald-100 rounded-2xl text-center">
+                        <span className="text-emerald-600 font-black text-sm flex items-center justify-center gap-2">
+                          <CheckCircle size={18}/> 이 과목의 모든 교사가 제출을 완료했습니다.
+                        </span>
                       </div>
                     )}
 
@@ -552,6 +581,7 @@ export default function App() {
             </div>
           )}
 
+          {/* 2. 제출 현황판 */}
           {viewMode === 'status' && isUnlocked && (
             <div className="w-full max-w-4xl bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-8 md:p-10 animate-fade-in mt-4 print:shadow-none print:p-0 print:mt-0">
               
@@ -660,6 +690,7 @@ export default function App() {
             </div>
           )}
           
+          {/* 3. 관리자 설정 화면 */}
           {viewMode === 'admin' && isUnlocked && (
             <div className="w-full max-w-2xl bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-8 md:p-10 animate-fade-in mt-4 print:hidden">
               <div className="flex justify-between items-start mb-8 border-b border-gray-100 pb-6">
@@ -701,20 +732,36 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* 💡 관리자용 O/X 체크리스트 설정 영역 */}
                 <div className="pt-4 border-t border-gray-100">
                   <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
                     <List size={20} className="text-purple-500"/> 출제 검토 항목(체크리스트) 관리
                   </h3>
                   <div className="bg-gray-50 border-2 border-gray-100 rounded-2xl p-4">
-                    <div className="space-y-2 mb-4 max-h-60 overflow-y-auto custom-scrollbar pr-2">
+                    <div className="space-y-2 mb-4 max-h-80 overflow-y-auto custom-scrollbar pr-2">
                       {(adminData.checklist || defaultChecklistData).map(item => (
                         <div key={item.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-200 shadow-sm transition-all hover:border-purple-200">
-                          <span className={item.type === 'category' ? 'font-black text-gray-800' : 'text-sm text-gray-600 pl-2'}>
+                          <span className={item.type === 'category' ? 'font-black text-gray-800' : 'text-sm text-gray-600 pl-2 flex-1'}>
                             {item.text}
                           </span>
-                          <button onClick={() => removeChecklistItem(item.id)} className="text-gray-400 hover:text-red-500 transition-colors p-1">
-                            <Trash2 size={16}/>
-                          </button>
+                          <div className="flex items-center gap-3">
+                            {/* O/X 설정 버튼 (관리자 전용) */}
+                            {item.type !== 'category' && (
+                              <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+                                <button
+                                  onClick={() => updateChecklistStatus(item.id, 'O')}
+                                  className={`px-3 py-1 text-xs font-black rounded-md transition-colors ${item.status !== 'X' ? 'bg-blue-500 text-white shadow-sm' : 'text-gray-400 hover:bg-gray-200'}`}
+                                >O</button>
+                                <button
+                                  onClick={() => updateChecklistStatus(item.id, 'X')}
+                                  className={`px-3 py-1 text-xs font-black rounded-md transition-colors ${item.status === 'X' ? 'bg-red-500 text-white shadow-sm' : 'text-gray-400 hover:bg-gray-200'}`}
+                                >X</button>
+                              </div>
+                            )}
+                            <button onClick={() => removeChecklistItem(item.id)} className="text-gray-400 hover:text-red-500 transition-colors p-1" title="삭제">
+                              <Trash2 size={16}/>
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
