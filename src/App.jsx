@@ -2,13 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Save, CheckCircle, Trash2, Users, Check, AlertCircle, FileText, 
   Edit2, Search, Settings, Plus, X, BarChart3, Clock, List,
-  Printer, Download, Lock, Unlock, Image as ImageIcon
+  Printer, Download, Lock, Unlock, Image as ImageIcon, History
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, addDoc, onSnapshot, doc, serverTimestamp, setDoc, deleteDoc } from 'firebase/firestore';
 
-// 🚨 선생님의 파이어베이스 설정이 완벽하게 적용되었습니다! 🚨
+// 🚨 파이어베이스 설정 (선생님의 값 유지됨) 🚨
 const firebaseConfig = {
   apiKey: "AIzaSyCUgfIQSpk_ifhQTUlj0EMU6jrutoRMq3U",
   authDomain: "timetablc.firebaseapp.com",
@@ -22,23 +22,29 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// 앱 ID 고정
 const appId = "school-exam-final-v2";
 
 const defaultChecklistData = [
   { id: 1, type: 'category', text: '1. 시험 문제 출제 원칙' },
   { id: 2, type: 'item1', text: '가. 교육 과정에 근거한 출제', status: 'O' },
-  { id: 3, type: 'item1', text: '나. 동 교과협의회를 통한 공동 출제', status: 'O' },
-  { id: 4, type: 'item2', text: '1) 성취 기준 및 성취 수준에 맞는 출제', status: 'O' },
-  { id: 5, type: 'item2', text: '2) 논술형 평가 문항 채점기준표 작성', status: 'O' },
-  { id: 6, type: 'item1', text: '다. 예상 평균 점수 적합성 확인', status: 'O' },
-  { id: 8, type: 'category', text: '2. 문항 출제 시 고려 사항' },
-  { id: 9, type: 'item2', text: '1) 시판 참고서 문제와의 일치 여부', status: 'O' },
-  { id: 10, type: 'item2', text: '2) 과년도 기출 문제와의 일치 여부', status: 'O' },
-  { id: 12, type: 'item2', text: '3) 선행 출제 여부 동교과 상호 확인', status: 'O' }
+  { id: 3, type: 'category', text: '나. 동 교과협의회를 통한 출제 계획 수립 및 공동 출제' },
+  { id: 4, type: 'item2', text: '1) 과목별 성취 기준 성취 수준에 맞는 출제', status: 'O' },
+  { id: 5, type: 'item2', text: '2) 논술형 평가 문항 출제 시 채점기준표 작성 여부', status: 'O' },
+  { id: 6, type: 'item1', text: '다. 문항정보표 및 문항 분석 자료 작성 및 활용 여부 확인', status: 'O' },
+  { id: 7, type: 'item1', text: '라. 예상 평균 점수를 제시하고 그에 적합한 난이도의 문제 출제 확인', status: 'O' },
+  { id: 8, type: 'category', text: '마. 문항 출제 시 고려해야 할 사항' },
+  { id: 9, type: 'item2', text: '1) 시판되는 참고서 문제와의 일치 여부 확인', status: 'O' },
+  { id: 10, type: 'item2', text: '2) 인터넷 탑재 문제와의 일치 여부 확인', status: 'O' },
+  { id: 11, type: 'item2', text: '3) 과년도 출제 문제와의 일치 여부 확인', status: 'O' },
+  { id: 12, type: 'item2', text: '4) 편성된 교육과정과 일치하며, 선행 출제 여부에 대한 동교과 상호 확인', status: 'O' },
+  { id: 13, type: 'item2', text: '5) 동학과 학급 간 출제 범위 통일 및 유사 선택교과 간 난이도 조정 여부 확인', status: 'O' },
+  { id: 14, type: 'item2', text: '6) 문항 곤란도가 낮은 문항에 높은 배점(역배점) 하지 않도록 함', status: 'O' },
+  { id: 15, type: 'category', text: '2. 논술형 평가의 세부 출제 원칙' },
+  { id: 16, type: 'item1', text: '가. 단순 지식의 양, 암기 능력, 기억 능력 등을 측정하는 문항 지양', status: 'O' },
+  { id: 17, type: 'item1', text: '나. 해결된 문제의 \'질\'을 측정하는 역량검사 지향', status: 'O' },
+  { id: 18, type: 'item1', text: '다. 하위문항의 개수를 분명하게 인식하도록 출제', status: 'O' }
 ];
 
-// 요일 및 시간 포맷팅 함수 (엑셀용 진짜 시간)
 const formatDateTime = (isoString) => {
   if (!isoString) return '';
   const date = new Date(isoString);
@@ -135,17 +141,15 @@ export default function App() {
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [viewMode, setViewMode] = useState('teacher'); 
   
-  // 비밀번호 인증 상태
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
 
-  // 선택된 서명의 전체 공문서 출력용 팝업 상태
   const [selectedSubmission, setSelectedSubmission] = useState(null);
+  const [viewingExamKey, setViewingExamKey] = useState(''); // 💡 과거 기록 조회를 위한 상태 추가
 
-  // 💡 관리자가 지정할 고사명과 서류 출력용 날짜 추가
   const defaultGlobalSettings = {
-    year: '2026', semester: '1', examName: '중간고사', documentDate: '2026. 4. 28.',
+    year: '2026', semester: '1', examName: '1차 정기시험', documentDate: '2026. 4. 28.',
     adminPassword: '1234', 
     subjects: [
       { name: '국어', teachers: ['김국어', '이국어'] },
@@ -156,15 +160,14 @@ export default function App() {
 
   const [globalSettings, setGlobalSettings] = useState(defaultGlobalSettings);
   
-  // Teacher State
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedTeacher, setSelectedTeacher] = useState('');
   const [signatureData, setSignatureData] = useState(null);
   const [resetSigCounter, setResetSigCounter] = useState(0);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [deleteStep, setDeleteStep] = useState(0); // 교사 서명 삭제 확인 스텝
   
-  // Admin & Status State
   const [adminData, setAdminData] = useState(defaultGlobalSettings);
   const [newSubject, setNewSubject] = useState('');
   const [newTeachers, setNewTeachers] = useState({}); 
@@ -175,7 +178,6 @@ export default function App() {
   const [newChecklistType, setNewChecklistType] = useState('item1');
   const [newChecklistText, setNewChecklistText] = useState('');
 
-  // 1. 인증 초기화
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -188,16 +190,13 @@ export default function App() {
         } else {
           await signInAnonymously(auth);
         }
-      } catch (e) { 
-        console.error("인증 에러 (파이어베이스 키를 확인하세요):", e); 
-      }
+      } catch (e) { console.error(e); }
     };
     initAuth();
     const unsubscribe = onAuthStateChanged(auth, setUser);
     return () => unsubscribe();
   }, []);
 
-  // 2. 관리자 설정 데이터 불러오기
   useEffect(() => {
     if (!user) return;
     return onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), 
@@ -208,21 +207,18 @@ export default function App() {
           if (!isDataLoaded) {
             setAdminData(prev => ({ ...prev, ...data }));
             setIsDataLoaded(true);
+            setViewingExamKey(`${data.year}|${data.semester}|${data.examName}`); // 현황판 초기값을 현재 설정으로 세팅
           }
         } else {
           setIsDataLoaded(true);
         }
       },
-      (err) => {
-        console.error("데이터 불러오기 에러 (파이어베이스 설정을 확인하세요):", err);
-      }
+      (err) => console.error(err)
     );
   }, [user, isDataLoaded]);
 
-  // 3. 서명 데이터 및 출력 상태 불러오기
   useEffect(() => {
     if (!user) return;
-    
     const unsubSigs = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'individualSignatures'), 
       (snap) => {
         const sigs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -230,7 +226,6 @@ export default function App() {
       },
       (err) => console.error(err)
     );
-
     const unsubPrints = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'printStatuses'), 
       (snap) => {
         const records = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -238,19 +233,18 @@ export default function App() {
       },
       (err) => console.error(err)
     );
-
     return () => { unsubSigs(); unsubPrints(); };
   }, [user]);
+
+  // 교사가 바뀌면 삭제 확인 버튼 스텝 초기화
+  useEffect(() => { setDeleteStep(0); }, [selectedTeacher]);
 
   const handleUnlock = (e) => {
     e.preventDefault();
     if (pinInput === globalSettings.adminPassword) {
-      setIsUnlocked(true);
-      setPinError(false);
-      setPinInput('');
+      setIsUnlocked(true); setPinError(false); setPinInput('');
     } else {
-      setPinError(true);
-      setPinInput('');
+      setPinError(true); setPinInput('');
     }
   };
 
@@ -259,34 +253,44 @@ export default function App() {
     if (!signatureData || !user) return;
     setIsSaving(true);
     try {
-      // 💡 진짜 제출 시간은 createdAt (serverTimestamp)로 클라우드에 안전하게 저장됩니다.
+      // 💡 서명 제출 시 현재 설정된 체크리스트 스냅샷을 함께 영구 보존합니다.
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'individualSignatures'), {
         year: String(globalSettings.year), 
         semester: String(globalSettings.semester), 
         examName: String(globalSettings.examName),
         subject: selectedSubject, 
         teacherName: selectedTeacher, 
-        signatureData, 
+        signatureData,
+        checklistSnapshot: globalSettings.checklist || defaultChecklistData, // 스냅샷 백업
         createdAt: serverTimestamp(), 
         uid: user.uid
       });
       setSaveSuccess(true); setSelectedTeacher(''); setSignatureData(null); setResetSigCounter(c => c+1);
       setTimeout(() => { setSaveSuccess(false); setSelectedSubject(''); }, 3000);
     } catch (e) { 
-      console.error("제출 에러:", e);
-      alert("데이터베이스 연결 오류입니다. 관리자에게 파이어베이스 규칙 설정을 확인해 달라고 요청하세요!");
+      alert("연결 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
     }
     setIsSaving(false);
+  };
+
+  const confirmDeleteSignature = async (id) => {
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'individualSignatures', id));
+      setSignatureData(null);
+      setDeleteStep(0);
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   const handleAdminSave = async () => {
     try {
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), adminData);
       setAdminMessage({ type: 'success', text: '설정이 안전하게 저장되었습니다.' });
+      setViewingExamKey(`${adminData.year}|${adminData.semester}|${adminData.examName}`);
       setTimeout(() => setAdminMessage({ type: '', text: '' }), 3000);
     } catch (e) {
-      console.error("저장 에러:", e);
-      setAdminMessage({ type: 'error', text: '저장 실패: 파이어베이스 규칙(Rules) 설정이 올바른지 확인하세요.' });
+      setAdminMessage({ type: 'error', text: '저장에 실패했습니다.' });
       setTimeout(() => setAdminMessage({ type: '', text: '' }), 5000);
     }
   };
@@ -311,14 +315,38 @@ export default function App() {
     setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000);
   };
 
+  // 💡 과거 기록 조회를 위한 파생 데이터 처리
+  const allExamKeys = new Set(allSignatures.map(s => `${s.year}|${s.semester}|${s.examName}`));
+  allExamKeys.add(`${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`);
+  const examOptions = Array.from(allExamKeys).sort((a,b) => b.localeCompare(a)); // 최신순 정렬
+
+  const [vYear, vSem, vExam] = (viewingExamKey || `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`).split('|');
+  const isViewingCurrent = viewingExamKey === `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`;
+  
+  // 조회 중인 시험의 서명 목록 필터링
+  const viewingSignatures = allSignatures.filter(s => s.year === vYear && s.semester === vSem && s.examName === vExam);
+  
+  // 현황판에 표시할 과목과 교사 명단 설정 (과거 기록이면 제출된 내역 기반으로 병합)
+  let subjectsToDisplay = Array.isArray(globalSettings.subjects) ? [...globalSettings.subjects] : [];
+  if (!isViewingCurrent) {
+    const pastSubjects = [...new Set(viewingSignatures.map(s => s.subject))];
+    const historicalSubjects = pastSubjects.map(ps => {
+      const existing = subjectsToDisplay.find(s => s.name === ps);
+      const submittedTeachers = [...new Set(viewingSignatures.filter(s => s.subject === ps).map(s => s.teacherName))];
+      return existing 
+        ? { ...existing, teachers: [...new Set([...existing.teachers, ...submittedTeachers])] }
+        : { name: ps, teachers: submittedTeachers };
+    });
+    subjectsToDisplay = historicalSubjects;
+  }
+
   const handleExportCSV = () => {
     let csv = "\uFEFF과목명,교사명,제출상태,서명(클라우드기록)시간\n";
-    safeSubjects.forEach(subject => {
-      const subjectSigs = currentExamSignatures.filter(s => s.subject === subject.name);
+    subjectsToDisplay.forEach(subject => {
+      const subjectSigs = viewingSignatures.filter(s => s.subject === subject.name);
       subject.teachers.forEach(teacher => {
         const sig = subjectSigs.find(s => s.teacherName === teacher);
         const status = sig ? "제출완료" : "미제출";
-        // 💡 엑셀에서는 진짜 제출 시간을 보여줍니다.
         const date = sig?.createdAt?.toDate ? formatDateTime(sig.createdAt.toDate().toISOString()) : "";
         csv += `${subject.name},${teacher},${status},${date}\n`;
       });
@@ -327,122 +355,92 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `출제검토현황_${globalSettings.year}_${globalSettings.semester}학기_${globalSettings.examName}.csv`;
+    link.download = `출제검토현황_${vYear}_${vSem}학기_${vExam}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
   const togglePrintStatus = async (subjectName, isCurrentlyPrinted) => {
-    const docId = `${globalSettings.year}_${globalSettings.semester}_${globalSettings.examName}_${subjectName}`;
+    const docId = `${vYear}_${vSem}_${vExam}_${subjectName}`;
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'printStatuses', docId);
     try {
       if (isCurrentlyPrinted) await deleteDoc(docRef);
-      else await setDoc(docRef, { year: String(globalSettings.year), semester: String(globalSettings.semester), examName: String(globalSettings.examName), subjectName: subjectName, printedAt: new Date().toISOString() });
+      else await setDoc(docRef, { year: vYear, semester: vSem, examName: vExam, subjectName: subjectName, printedAt: new Date().toISOString() });
     } catch (error) {
-      console.error("출력 상태 변경 오류:", error);
-      alert("출력 상태 변경 중 오류가 발생했습니다. 파이어베이스 규칙을 확인하세요.");
+      console.error(error);
     }
   };
 
-  // 관리자 설정 함수들
-  const addSubject = () => {
-    if(!newSubject.trim()) return;
-    setAdminData(prev => ({ ...prev, subjects: [...prev.subjects, { name: newSubject.trim(), teachers: [] }] }));
-    setNewSubject('');
-  };
-  const removeSubject = (subjectName) => {
-    setAdminData(prev => ({ ...prev, subjects: prev.subjects.filter(s => s.name !== subjectName) }));
-  };
-  const addTeacherToSubject = (subjectName) => {
-    const teacherName = newTeachers[subjectName]?.trim();
-    if(!teacherName) return;
-    setAdminData(prev => ({ ...prev, subjects: prev.subjects.map(s => s.name === subjectName ? { ...s, teachers: [...s.teachers, teacherName] } : s) }));
-    setNewTeachers(prev => ({ ...prev, [subjectName]: '' }));
-  };
-  const removeTeacherFromSubject = (subjectName, teacherName) => {
-    setAdminData(prev => ({ ...prev, subjects: prev.subjects.map(s => s.name === subjectName ? { ...s, teachers: s.teachers.filter(t => t !== teacherName) } : s) }));
-  };
-  const addChecklistItem = () => {
-    if(!newChecklistText.trim()) return;
-    const newItem = { id: Date.now(), type: newChecklistType, text: newChecklistText.trim(), status: 'O' };
-    setAdminData(prev => ({ ...prev, checklist: [...(prev.checklist || defaultChecklistData), newItem] }));
-    setNewChecklistText('');
-  };
-  const removeChecklistItem = (id) => {
-    setAdminData(prev => ({ ...prev, checklist: (prev.checklist || defaultChecklistData).filter(item => item.id !== id) }));
-  };
-  const updateChecklistStatus = (id, newStatus) => {
-    setAdminData(prev => ({
-      ...prev,
-      checklist: (prev.checklist || defaultChecklistData).map(item =>
-        item.id === id ? { ...item, status: newStatus } : item
-      )
-    }));
-  };
-
-  const safeSubjects = Array.isArray(globalSettings.subjects) ? globalSettings.subjects : [];
-  const safeTeachers = safeSubjects.find(s => s.name === selectedSubject)?.teachers || [];
-  const currentChecklist = globalSettings.checklist || defaultChecklistData;
+  // 교사용 뷰 전용 필터링
   const currentExamSignatures = allSignatures.filter(s => 
     s.year === String(globalSettings.year) && s.semester === String(globalSettings.semester) && s.examName === String(globalSettings.examName)
   );
-
   const subjectSignaturesForTeacherView = currentExamSignatures.filter(s => s.subject === selectedSubject);
-  const submittedNamesForSelectedSubject = subjectSignaturesForTeacherView.map(s => s.teacherName);
-  const availableTeachers = safeTeachers.filter(t => !submittedNamesForSelectedSubject.includes(t));
+  const existingSigForSelectedTeacher = subjectSignaturesForTeacherView.find(s => s.teacherName === selectedTeacher);
+  const safeTeachers = subjectsToDisplay.find(s => s.name === selectedSubject)?.teachers || [];
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-100 selection:bg-blue-100 font-sans">
       
-      {/* 서류 출력용 팝업 */}
+      {/* 💡 완벽한 표(Table) 형태로 디자인된 출력용 팝업 (스냅샷 백업 기능 포함) */}
       {selectedSubmission && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 print:static print:block print:bg-white print:p-0 animate-fade-in overflow-y-auto" onClick={() => setSelectedSubmission(null)}>
-          <div className="bg-white p-8 md:p-12 rounded-[2rem] max-w-3xl w-full shadow-2xl print:shadow-none print:rounded-none print:max-w-none print:w-full print:p-4 my-auto" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 md:p-8 print:static print:block print:bg-white print:p-0 animate-fade-in overflow-y-auto" onClick={() => setSelectedSubmission(null)}>
+          <div className="bg-white p-10 md:p-14 rounded-none md:rounded-[2rem] max-w-4xl w-full shadow-2xl print:shadow-none print:max-w-none print:w-full print:p-0 my-auto" onClick={e => e.stopPropagation()}>
+            
             <div className="print:text-black">
-              <h2 className="text-3xl font-black text-center mb-8 border-b-[3px] border-black pb-4 tracking-widest">출제 검토 확인서</h2>
-              <div className="flex justify-between items-end mb-6 font-bold text-lg">
-                {/* 💡 관리자가 지정한 고사명 출력 */}
-                <div>{selectedSubmission.year}년 {selectedSubmission.semester}학기 {selectedSubmission.examName}</div>
-                <div className="text-right leading-relaxed text-xl">
-                  <span className="inline-block w-16 text-gray-600">과목:</span> {selectedSubmission.subject} <br/>
-                  <span className="inline-block w-16 text-gray-600">성명:</span> {selectedSubmission.teacherName}
-                </div>
-              </div>
-              <div className="border-t-[3px] border-black border-b-[3px] py-6 mb-8">
-                <ul className="space-y-4 text-lg">
-                  {currentChecklist.map(item => (
-                    <li key={item.id} className={`flex justify-between items-start ${item.type === 'category' ? 'font-black mt-6 first:mt-0 text-xl' : 'pl-4'}`}>
-                      <span className={item.type === 'category' ? '' : 'relative before:content-["-"] before:absolute before:-left-3 pr-4 flex-1'}>
-                        {item.text}
-                      </span>
-                      {item.type !== 'category' && (
-                        <span className="font-black shrink-0 flex items-center gap-4 text-xl">
-                          <span className={`w-10 h-10 flex items-center justify-center rounded-full ${(item.status !== 'X') ? 'border-[3px] border-black' : 'text-gray-400 font-medium'}`}>O</span>
-                          <span className={`w-10 h-10 flex items-center justify-center rounded-full ${(item.status === 'X') ? 'border-[3px] border-black' : 'text-gray-400 font-medium'}`}>X</span>
-                        </span>
+              <h2 className="text-3xl font-black text-center mb-8 tracking-[0.2em]">지필평가 출제 검토 확인서</h2>
+              <p className="text-lg font-bold leading-relaxed mb-4 text-justify">
+                본인은 {selectedSubmission.year}년 {selectedSubmission.semester}학기 {selectedSubmission.examName} {selectedSubmission.subject}과 시험문제를 출제함에 있어 아래 표와 같은 내용을 검토하였음을 확인합니다.
+              </p>
+
+              <table className="w-full border-collapse border-2 border-black mb-10 text-[15px] print:text-[14px]">
+                <thead>
+                  <tr>
+                    <th className="border-2 border-black p-3 bg-gray-100 font-black text-center" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>검토 사항</th>
+                    <th className="border-2 border-black p-3 bg-gray-100 font-black text-center w-28 whitespace-nowrap" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>확인여부<br/>(O, X)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* 서명 당시 보존된 스냅샷 체크리스트를 렌더링합니다. (과거 서류 변형 방지) */}
+                  {(selectedSubmission.checklistSnapshot || defaultChecklistData).map(item => (
+                    <tr key={item.id}>
+                      {item.type === 'category' ? (
+                        <>
+                          <td className="border border-black px-4 py-3 font-bold bg-gray-50 print:bg-gray-50" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>{item.text}</td>
+                          <td className="border border-black px-4 py-3 bg-gray-50 print:bg-gray-50" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}></td>
+                        </>
+                      ) : (
+                        <>
+                          <td className={`border border-black px-4 py-2 leading-snug ${item.type === 'item2' ? 'pl-8' : 'pl-4'}`}>{item.text}</td>
+                          <td className="border border-black p-2 text-center font-black text-xl">{item.status}</td>
+                        </>
                       )}
-                    </li>
+                    </tr>
                   ))}
-                </ul>
-              </div>
-              <div className="text-center mb-8">
-                <p className="text-xl font-bold mb-2">위 항목을 모두 확인하고 이상 없음을 확인합니다.</p>
-                {/* 💡 관리자가 지정한 출력 날짜 적용 (글자 크기 동일하게) */}
-                <p className="text-xl font-bold mb-6">{globalSettings.documentDate}</p>
-                <div className="flex justify-center items-center gap-6 text-2xl font-black mt-12 relative">
-                  확인자: {selectedSubmission.teacherName}
-                  <div className="absolute ml-48 -mt-6">
-                    <img src={selectedSubmission.signatureData} alt="서명" className="h-24 object-contain mix-blend-multiply" />
+                </tbody>
+              </table>
+
+              <div className="text-center mt-12 print:mt-16">
+                <p className="text-lg font-bold mb-6">위 항목을 모두 확인하고 이상 없음을 확인합니다.</p>
+                <p className="text-xl font-bold tracking-widest mb-10">{globalSettings.documentDate}</p>
+                <div className="flex justify-end items-center text-xl font-bold relative pr-8">
+                  <span className="mr-8">확인 직위: 교사</span>
+                  <span className="mr-3">성명: {selectedSubmission.teacherName}</span>
+                  <span>(인)</span>
+                  <div className="absolute right-0 -mt-10 mr-4">
+                    <img src={selectedSubmission.signatureData} alt="서명" className="h-20 object-contain mix-blend-multiply" />
                   </div>
                 </div>
               </div>
             </div>
-            <div className="flex gap-4 mt-12 pt-6 border-t border-gray-100 print:hidden">
-              <button onClick={() => window.print()} className="flex-1 py-4 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-lg shadow-lg">
-                <Printer size={22}/> 이 확인서 인쇄하기
+
+            <div className="flex gap-4 mt-16 pt-8 border-t border-gray-200 print:hidden">
+              {/* PDF 백업을 유도하는 명확한 문구 사용 */}
+              <button onClick={() => window.print()} className="flex-1 py-4 bg-blue-600 text-white font-black rounded-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-2 text-lg shadow-lg active:scale-95">
+                <Printer size={22}/> 인쇄 및 PDF로 백업 저장
               </button>
-              <button onClick={() => setSelectedSubmission(null)} className="flex-1 py-4 bg-gray-900 text-white font-bold rounded-xl hover:bg-black transition-colors flex items-center justify-center gap-2 text-lg">
+              <button onClick={() => setSelectedSubmission(null)} className="flex-1 py-4 bg-gray-900 text-white font-black rounded-xl hover:bg-black transition-all flex items-center justify-center gap-2 text-lg active:scale-95">
                 <X size={22}/> 닫기
               </button>
             </div>
@@ -482,6 +480,7 @@ export default function App() {
             </div>
           )}
 
+          {/* 1. 교사 서명 화면 */}
           {viewMode === 'teacher' && (
             <div className="w-full max-w-md bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] overflow-hidden border border-white relative mt-4">
               <div className="bg-gradient-to-br from-blue-600 to-blue-800 text-white p-8 text-center relative overflow-hidden">
@@ -497,7 +496,7 @@ export default function App() {
                     <Check className="text-green-600" size={48} strokeWidth={3}/>
                   </div>
                   <h3 className="text-2xl font-black text-gray-800">제출 완료!</h3>
-                  <p className="text-gray-500 mt-3 text-sm font-medium">감사합니다. 화면이 곧 초기화됩니다.</p>
+                  <p className="text-gray-500 mt-3 text-sm font-medium">감사합니다. 문서가 클라우드에 영구 보존되었습니다.</p>
                 </div>
               ) : (
                 <form onSubmit={handleTeacherSubmit} className="p-8 space-y-6">
@@ -509,7 +508,7 @@ export default function App() {
                     </div>
                     <div className="p-4 overflow-y-auto custom-scrollbar flex-1 bg-gray-50">
                       <ul className="space-y-3 text-sm text-gray-600">
-                        {currentChecklist.map(item => (
+                        {(globalSettings.checklist || defaultChecklistData).map(item => (
                           <li key={item.id} className={`flex justify-between items-start ${item.type === 'category' ? 'font-black text-gray-800 mt-5 border-b border-gray-200 pb-1 text-base' : 'pl-2 mt-2'}`}>
                             <span className={item.type === 'category' ? '' : 'relative before:content-["-"] before:absolute before:-left-2 before:text-gray-400 pl-2 pr-4 flex-1 leading-tight'}>
                               {item.text}
@@ -531,36 +530,52 @@ export default function App() {
                       <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1">Subject</label>
                       <select value={selectedSubject} onChange={e=>{setSelectedSubject(e.target.value); setSelectedTeacher('');}} className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-base font-bold focus:border-blue-500 focus:bg-white transition-all appearance-none outline-none shadow-sm" required>
                         <option value="">과목을 선택하세요</option>
-                        {safeSubjects.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                        {Array.isArray(globalSettings.subjects) && globalSettings.subjects.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
                       </select>
                       <div className="absolute right-4 bottom-4 pointer-events-none opacity-30"><Search size={18}/></div>
                     </div>
 
-                    {selectedSubject && availableTeachers.length > 0 && (
+                    {selectedSubject && safeTeachers.length > 0 && (
                       <div className="animate-fade-in relative group">
                         <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1">Teacher</label>
                         <select value={selectedTeacher} onChange={e=>setSelectedTeacher(e.target.value)} className="w-full p-4 bg-blue-50/50 border-2 border-blue-100 rounded-2xl text-base font-bold text-blue-800 focus:border-blue-500 focus:bg-white transition-all appearance-none outline-none shadow-sm" required>
                           <option value="">성함을 선택하세요</option>
-                          {availableTeachers.map(t=><option key={t} value={t}>{t}</option>)}
+                          {/* 💡 재서명을 위해 이제 제출한 선생님도 명단에 보입니다. */}
+                          {safeTeachers.map(t=><option key={t} value={t}>{t}</option>)}
                         </select>
                         <div className="absolute right-4 bottom-4 pointer-events-none opacity-30"><Users size={18}/></div>
                       </div>
                     )}
 
-                    {selectedSubject && availableTeachers.length === 0 && (
-                      <div className="animate-fade-in p-4 bg-emerald-50 border-2 border-emerald-100 rounded-2xl text-center">
-                        <span className="text-emerald-600 font-black text-sm flex items-center justify-center gap-2">
-                          <CheckCircle size={18}/> 이 과목의 모든 교사가 제출을 완료했습니다.
-                        </span>
+                    {/* 💡 서명을 이미 한 교사일 경우, 재서명(삭제) 옵션을 띄웁니다. */}
+                    {selectedTeacher && existingSigForSelectedTeacher ? (
+                      <div className="animate-fade-in p-5 bg-emerald-50 border-2 border-emerald-200 rounded-2xl text-center shadow-sm">
+                        <CheckCircle className="mx-auto text-emerald-500 mb-2" size={36}/>
+                        <p className="font-black text-emerald-800 mb-1 text-lg">제출 완료</p>
+                        <p className="text-xs text-gray-500 mb-5 font-medium">제출일시: {formatDateTime(existingSigForSelectedTeacher.createdAt?.toDate?.()?.toISOString())}</p>
+                        
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (deleteStep === 0) setDeleteStep(1);
+                            else confirmDeleteSignature(existingSigForSelectedTeacher.id);
+                          }}
+                          className={`w-full py-3.5 font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 ${
+                            deleteStep === 0 
+                              ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50' 
+                              : 'bg-red-500 text-white hover:bg-red-600 animate-pulse'
+                          }`}
+                        >
+                          <Trash2 size={16}/>
+                          {deleteStep === 0 ? '잘못 제출했습니다 (삭제 후 재서명)' : '정말 삭제하시겠습니까? (클릭 시 즉시 삭제)'}
+                        </button>
                       </div>
-                    )}
-
-                    {selectedTeacher && (
+                    ) : selectedTeacher && (
                       <div className="animate-fade-in space-y-3 pt-2">
                         <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2">Signature</label>
                         <SignaturePad onSave={setSignatureData} resetTrigger={resetSigCounter} />
                         <button type="submit" disabled={isSaving || !signatureData} className="w-full py-5 bg-gray-900 text-white rounded-[1.5rem] font-black text-lg shadow-xl shadow-gray-200 hover:bg-black transition-all active:scale-95 disabled:bg-gray-300 flex items-center justify-center gap-2 mt-4">
-                          {isSaving ? '제출 중...' : <><Save size={20}/> 확인 및 서명 제출</>}
+                          {isSaving ? '클라우드에 안전하게 보존 중...' : <><Save size={20}/> 확인 및 서명 제출</>}
                         </button>
                       </div>
                     )}
@@ -570,41 +585,61 @@ export default function App() {
             </div>
           )}
 
+          {/* 2. 제출 현황 및 과거 기록 조회 화면 */}
           {viewMode === 'status' && isUnlocked && (
             <div className="w-full max-w-4xl bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-8 md:p-10 animate-fade-in mt-4 print:shadow-none print:p-0 print:mt-0">
+              
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 border-b border-gray-100 pb-6 print:border-b-2 print:border-gray-800">
                 <div className="flex items-center gap-3">
                   <div className="bg-emerald-100 p-3 rounded-2xl print:hidden"><BarChart3 className="text-emerald-600" size={24}/></div>
                   <div>
                     <h2 className="text-2xl font-black text-gray-800">과목별 검토 제출 현황</h2>
-                    <p className="text-gray-500 text-sm font-medium">
-                      {String(globalSettings.year)}년 {String(globalSettings.semester)}학기 {String(globalSettings.examName)}
-                    </p>
+                    <p className="text-gray-500 text-sm font-medium">진행 현황을 모니터링하고 문서를 인쇄합니다.</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 print:hidden">
-                  <button onClick={handleExportCSV} className="bg-blue-50 text-blue-700 px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-blue-100 transition-colors border border-blue-200">
-                    <Download size={16} /> 엑셀 다운로드
-                  </button>
-                  <button onClick={() => window.print()} className="bg-gray-800 text-white px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-black transition-colors shadow-md">
-                    <Printer size={16} /> 현황판 인쇄
-                  </button>
+                
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 print:hidden">
+                  {/* 💡 과거 기록 영구 조회를 위한 드롭다운 추가 */}
+                  <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 p-1 rounded-xl">
+                    <History size={16} className="text-gray-400 ml-2"/>
+                    <select 
+                      value={viewingExamKey} 
+                      onChange={(e) => setViewingExamKey(e.target.value)}
+                      className="bg-transparent p-2 text-sm font-bold text-gray-700 outline-none pr-4"
+                    >
+                      {examOptions.map(opt => {
+                        const [y, s, e] = opt.split('|');
+                        return <option key={opt} value={opt}>{y}년 {s}학기 {e}</option>
+                      })}
+                    </select>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button onClick={handleExportCSV} className="bg-blue-50 text-blue-700 px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-blue-100 transition-colors border border-blue-200">
+                      <Download size={16} /> 엑셀
+                    </button>
+                    <button onClick={() => window.print()} className="bg-gray-800 text-white px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-black transition-colors shadow-md">
+                      <Printer size={16} /> 인쇄
+                    </button>
+                  </div>
                 </div>
               </div>
 
+              {/* 현재 조회 중인 시험 정보 배너 */}
+              <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0">
+                {vYear}년 {vSem}학기 {vExam}
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 print:grid-cols-2">
-                {safeSubjects.map(subject => {
-                  const subjectSignatures = currentExamSignatures.filter(s => s.subject === subject.name);
+                {subjectsToDisplay.map(subject => {
+                  const subjectSignatures = viewingSignatures.filter(s => s.subject === subject.name);
                   const submittedNames = subjectSignatures.map(s => s.teacherName);
                   const totalCount = subject.teachers.length;
                   const submittedCount = subject.teachers.filter(t => submittedNames.includes(t)).length;
                   const isComplete = totalCount > 0 && submittedCount === totalCount;
                   
                   const printRecord = printStatuses.find(p => 
-                    p.year === String(globalSettings.year) && 
-                    p.semester === String(globalSettings.semester) && 
-                    p.examName === String(globalSettings.examName) && 
-                    p.subjectName === subject.name
+                    p.year === vYear && p.semester === vSem && p.examName === vExam && p.subjectName === subject.name
                   );
 
                   return (
@@ -631,7 +666,7 @@ export default function App() {
                                 </span>
                                 {hasSubmitted ? (
                                   <button onClick={() => setSelectedSubmission(sigRecord)} className="flex items-center gap-1 text-xs font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100 hover:bg-emerald-100 transition-colors print:border-none print:bg-transparent print:text-gray-800">
-                                    <FileText size={14} className="print:hidden"/> 서류 인쇄(확인)
+                                    <FileText size={14} className="print:hidden"/> 백업 서류 확인
                                   </button>
                                 ) : (
                                   <span className="text-xs font-bold text-red-400 print:text-gray-500">미제출</span>
@@ -667,9 +702,9 @@ export default function App() {
                   );
                 })}
               </div>
-              {safeSubjects.length === 0 && (
-                <div className="text-center py-12 bg-gray-50 rounded-3xl">
-                  <p className="text-gray-500 font-bold">관리자 화면에서 과목과 교사 명단을 먼저 등록해 주세요.</p>
+              {subjectsToDisplay.length === 0 && (
+                <div className="text-center py-12 bg-gray-50 rounded-3xl mt-6">
+                  <p className="text-gray-500 font-bold">이 시험 기간에 기록된 데이터가 없습니다.</p>
                 </div>
               )}
             </div>
@@ -698,7 +733,6 @@ export default function App() {
 
               <div className="space-y-8">
                 
-                {/* 💡 관리자 기본 설정: 고사명과 날짜 추가 */}
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   <div className="md:col-span-1">
                     <label className="block text-[10px] font-black text-gray-500 mb-2">연도</label>
@@ -748,12 +782,13 @@ export default function App() {
                       ))}
                     </div>
                     <div className="flex gap-2 pt-4 border-t border-gray-200">
-                      <select value={newChecklistType} onChange={e=>setNewChecklistType(e.target.value)} className="p-3 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:border-purple-500 font-bold text-gray-700">
+                      <select value={newChecklistType} onChange={e=>setNewChecklistType(e.target.value)} className="p-3 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:border-purple-500 font-bold text-gray-700 shrink-0">
                         <option value="category">대분류 (제목)</option>
-                        <option value="item1">일반 항목</option>
+                        <option value="item1">중분류 (가, 나...)</option>
+                        <option value="item2">소분류 (1), 2)...)</option>
                       </select>
                       <input type="text" value={newChecklistText} onChange={e=>setNewChecklistText(e.target.value)} placeholder="검토 항목 내용 입력" className="flex-1 p-3 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:border-purple-500"/>
-                      <button type="button" onClick={addChecklistItem} className="bg-gray-800 text-white px-4 rounded-xl font-bold hover:bg-black transition-all shadow-md active:scale-95 whitespace-nowrap">
+                      <button type="button" onClick={addChecklistItem} className="bg-gray-800 text-white px-4 rounded-xl font-bold hover:bg-black transition-all shadow-md active:scale-95 whitespace-nowrap shrink-0">
                         항목 추가
                       </button>
                     </div>
