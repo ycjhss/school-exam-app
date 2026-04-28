@@ -45,33 +45,63 @@ const defaultChecklistData = [
   { id: 18, type: 'item1', text: '다. 하위문항의 개수를 분명하게 인식하도록 출제', status: 'O' }
 ];
 
+// 💡 날짜 포맷팅 시 에러가 나지 않도록 철저한 방어벽 추가
 const formatDateTime = (isoString) => {
   if (!isoString) return '';
-  const date = new Date(isoString);
-  const days = ['일', '월', '화', '수', '목', '금', '토'];
-  const yy = String(date.getFullYear()).slice(2);
-  const mm = date.getMonth() + 1;
-  const dd = date.getDate();
-  const day = days[date.getDay()];
-  const hh = String(date.getHours()).padStart(2, '0');
-  const min = String(date.getMinutes()).padStart(2, '0');
-  return `${yy}. ${mm}. ${dd}. (${day}) ${hh}:${min}`;
+  try {
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return ''; // 유효하지 않은 날짜인 경우 빈칸 반환
+    const days = ['일', '월', '화', '수', '목', '금', '토'];
+    const yy = String(date.getFullYear()).slice(2);
+    const mm = date.getMonth() + 1;
+    const dd = date.getDate();
+    const day = days[date.getDay()];
+    const hh = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    return `${yy}. ${mm}. ${dd}. (${day}) ${hh}:${min}`;
+  } catch (e) {
+    return '';
+  }
 };
 
-const SignaturePad = ({ onSave, resetTrigger }) => {
+// 💡 파이어베이스 Timestamp 오류로 인한 흰 화면 방지용 함수 추가
+const getDisplayDate = (sig) => {
+  if (!sig || !sig.createdAt) return '';
+  try {
+    if (typeof sig.createdAt.toDate === 'function') {
+      return formatDateTime(sig.createdAt.toDate().toISOString());
+    }
+    if (typeof sig.createdAt === 'string') {
+      return formatDateTime(sig.createdAt);
+    }
+    if (sig.createdAt instanceof Date) {
+      return formatDateTime(sig.createdAt.toISOString());
+    }
+  } catch(e) {
+    return '';
+  }
+  return '';
+};
+
+// 💡 캔버스 에러를 100% 차단하는 서명 패드
+const SignaturePad = ({ onSave }) => {
   const canvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
 
   const initCanvas = () => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !canvas.parentElement) return;
+    const rect = canvas.parentElement.getBoundingClientRect();
+    
+    // 크기를 먼저 지정한 후 선 속성을 설정해야 초기화되지 않습니다.
+    if (canvas.width !== rect.width) canvas.width = rect.width;
+    if (canvas.height !== 160) canvas.height = 160;
+
     const ctx = canvas.getContext('2d');
+    if (!ctx) return; // ctx가 없을 때의 치명적 에러(흰화면) 방지
     ctx.lineWidth = 4;
     ctx.lineCap = 'round';
     ctx.strokeStyle = '#000';
-    const rect = canvas.parentElement.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = 160;
   };
 
   useEffect(() => {
@@ -80,44 +110,59 @@ const SignaturePad = ({ onSave, resetTrigger }) => {
     return () => window.removeEventListener('resize', initCanvas);
   }, []);
 
-  useEffect(() => { if (resetTrigger) clearCanvas(); }, [resetTrigger]);
-
   const getCoordinates = (e) => {
     const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    // 모바일 터치 이벤트 안전 처리
+    const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
     return { x: clientX - rect.left, y: clientY - rect.top };
   };
 
   const startDrawing = (e) => {
-    e.preventDefault(); setIsDrawing(true);
+    e.preventDefault(); 
+    setIsDrawing(true);
     const coords = getCoordinates(e);
-    const ctx = canvasRef.current.getContext('2d');
-    ctx.beginPath(); ctx.moveTo(coords.x, coords.y);
+    const ctx = canvasRef.current?.getContext('2d');
+    if (ctx) {
+      ctx.beginPath(); 
+      ctx.moveTo(coords.x, coords.y);
+    }
   };
 
   const draw = (e) => {
-    e.preventDefault(); if (!isDrawing) return;
+    e.preventDefault(); 
+    if (!isDrawing) return;
     const coords = getCoordinates(e);
-    const ctx = canvasRef.current.getContext('2d');
-    ctx.lineTo(coords.x, coords.y); ctx.stroke();
+    const ctx = canvasRef.current?.getContext('2d');
+    if (ctx) {
+      ctx.lineTo(coords.x, coords.y); 
+      ctx.stroke();
+    }
   };
 
   const stopDrawing = () => {
-    if (isDrawing) { setIsDrawing(false); onSave(canvasRef.current.toDataURL()); }
+    if (isDrawing) { 
+      setIsDrawing(false); 
+      if (canvasRef.current) {
+        onSave(canvasRef.current.toDataURL()); 
+      }
+    }
   };
 
   const clearCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (ctx) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
     onSave(null);
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full animate-fade-in">
       <div className="border-2 border-gray-200 border-dashed rounded-2xl bg-white overflow-hidden relative h-40 shadow-inner group transition-all focus-within:border-blue-400">
         <canvas
           ref={canvasRef}
@@ -141,7 +186,6 @@ export default function App() {
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [viewMode, setViewMode] = useState('teacher'); 
   
-  // 관리자 전용 암호 상태
   const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
@@ -164,7 +208,6 @@ export default function App() {
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedTeacher, setSelectedTeacher] = useState('');
   const [signatureData, setSignatureData] = useState(null);
-  const [resetSigCounter, setResetSigCounter] = useState(0);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -269,7 +312,7 @@ export default function App() {
         createdAt: serverTimestamp(), 
         uid: user.uid
       });
-      setSaveSuccess(true); setSelectedTeacher(''); setSignatureData(null); setResetSigCounter(c => c+1);
+      setSaveSuccess(true); setSelectedTeacher(''); setSignatureData(null);
       setTimeout(() => { setSaveSuccess(false); setSelectedSubject(''); }, 3000);
     } catch (e) { 
       setSubmitError("데이터베이스 연결 오류입니다. 관리자에게 문의하세요.");
@@ -325,7 +368,6 @@ export default function App() {
     if(!bulkInput.trim()) return;
     const lines = bulkInput.split('\n');
     const newSubjectsMap = {};
-    // 💡 안전한 순회를 위해 || [] 추가
     (adminData.subjects || []).forEach(s => { newSubjectsMap[s.name] = new Set(s.teachers || []); });
     lines.forEach(line => {
       const parts = line.split('\t').map(p => p.trim()).filter(Boolean);
@@ -371,7 +413,7 @@ export default function App() {
       (subject.teachers || []).forEach(teacher => {
         const sig = subjectSigs.find(s => s.teacherName === teacher);
         const status = sig ? "제출완료" : "미제출";
-        const date = sig?.createdAt?.toDate ? formatDateTime(sig.createdAt.toDate().toISOString()) : "";
+        const date = getDisplayDate(sig);
         csv += `${subject.name},${teacher},${status},${date}\n`;
       });
     });
@@ -396,7 +438,6 @@ export default function App() {
     }
   };
 
-  // 💡 방어 코드 (안전 장치 추가)
   const addSubject = () => {
     if(!newSubject.trim()) return;
     setAdminData(prev => ({ ...prev, subjects: [...(prev.subjects || []), { name: newSubject.trim(), teachers: [] }] }));
@@ -434,14 +475,12 @@ export default function App() {
 
   const safeSubjects = Array.isArray(globalSettings.subjects) ? globalSettings.subjects : [];
   const safeTeachers = safeSubjects.find(s => s.name === selectedSubject)?.teachers || [];
-  const currentChecklist = globalSettings.checklist || defaultChecklistData;
   const currentExamSignatures = allSignatures.filter(s => 
     s.year === String(globalSettings.year) && s.semester === String(globalSettings.semester) && s.examName === String(globalSettings.examName)
   );
 
   const subjectSignaturesForTeacherView = currentExamSignatures.filter(s => s.subject === selectedSubject);
-  const submittedNamesForSelectedSubject = subjectSignaturesForTeacherView.map(s => s.teacherName);
-  const availableTeachers = safeTeachers.filter(t => !submittedNamesForSelectedSubject.includes(t));
+  const existingSigForSelectedTeacher = subjectSignaturesForTeacherView.find(s => s.teacherName === selectedTeacher);
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-100 selection:bg-blue-100 font-sans">
@@ -581,7 +620,13 @@ export default function App() {
                   <div className="space-y-5">
                     <div className="relative group">
                       <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1">Subject</label>
-                      <select value={selectedSubject} onChange={e=>{setSelectedSubject(e.target.value); setSelectedTeacher('');}} className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-base font-bold focus:border-blue-500 focus:bg-white transition-all appearance-none outline-none shadow-sm" required>
+                      <select value={selectedSubject} onChange={e=>{
+                        setSelectedSubject(e.target.value); 
+                        setSelectedTeacher('');
+                        setSignatureData(null);
+                        setDeleteStep(0);
+                        setSubmitError('');
+                      }} className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-base font-bold focus:border-blue-500 focus:bg-white transition-all appearance-none outline-none shadow-sm" required>
                         <option value="">과목을 선택하세요</option>
                         {Array.isArray(globalSettings.subjects) && globalSettings.subjects.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
                       </select>
@@ -591,7 +636,12 @@ export default function App() {
                     {selectedSubject && safeTeachers.length > 0 && (
                       <div className="animate-fade-in relative group">
                         <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1">Teacher</label>
-                        <select value={selectedTeacher} onChange={e=>setSelectedTeacher(e.target.value)} className="w-full p-4 bg-blue-50/50 border-2 border-blue-100 rounded-2xl text-base font-bold text-blue-800 focus:border-blue-500 focus:bg-white transition-all appearance-none outline-none shadow-sm" required>
+                        <select value={selectedTeacher} onChange={e => {
+                          setSelectedTeacher(e.target.value);
+                          setSignatureData(null);
+                          setDeleteStep(0);
+                          setSubmitError('');
+                        }} className="w-full p-4 bg-blue-50/50 border-2 border-blue-100 rounded-2xl text-base font-bold text-blue-800 focus:border-blue-500 focus:bg-white transition-all appearance-none outline-none shadow-sm" required>
                           <option value="">성함을 선택하세요</option>
                           {safeTeachers.map(t=><option key={t} value={t}>{t}</option>)}
                         </select>
@@ -599,37 +649,39 @@ export default function App() {
                       </div>
                     )}
 
-                    {selectedTeacher && existingSigForSelectedTeacher ? (
-                      <div className="animate-fade-in p-5 bg-emerald-50 border-2 border-emerald-200 rounded-2xl text-center shadow-sm">
-                        <CheckCircle className="mx-auto text-emerald-500 mb-2" size={36}/>
-                        <p className="font-black text-emerald-800 mb-1 text-lg">제출 완료</p>
-                        <p className="text-xs text-gray-500 mb-5 font-medium">제출일시: {formatDateTime(existingSigForSelectedTeacher.createdAt?.toDate?.()?.toISOString())}</p>
-                        
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (deleteStep === 0) setDeleteStep(1);
-                            else confirmDeleteSignature(existingSigForSelectedTeacher.id);
-                          }}
-                          className={`w-full py-3.5 font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 ${
-                            deleteStep === 0 
-                              ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50' 
-                              : 'bg-red-500 text-white hover:bg-red-600 animate-pulse'
-                          }`}
-                        >
-                          <Trash2 size={16}/>
-                          {deleteStep === 0 ? '잘못 제출했습니다 (삭제 후 재서명)' : '정말 삭제하시겠습니까? (클릭 시 즉시 삭제)'}
-                        </button>
-                      </div>
-                    ) : selectedTeacher && (
-                      <div className="animate-fade-in space-y-3 pt-2">
-                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2">Signature</label>
-                        <SignaturePad onSave={setSignatureData} resetTrigger={resetSigCounter} />
-                        <button type="submit" disabled={isSaving || !signatureData} className="w-full py-5 bg-gray-900 text-white rounded-[1.5rem] font-black text-lg shadow-xl shadow-gray-200 hover:bg-black transition-all active:scale-95 disabled:bg-gray-300 flex items-center justify-center gap-2 mt-4">
-                          {isSaving ? '클라우드에 안전하게 보존 중...' : <><Save size={20}/> 확인 및 서명 제출</>}
-                        </button>
-                        {submitError && <p className="text-red-500 text-xs font-bold text-center mt-2">{submitError}</p>}
-                      </div>
+                    {selectedTeacher && (
+                      existingSigForSelectedTeacher ? (
+                        <div className="animate-fade-in p-5 bg-emerald-50 border-2 border-emerald-200 rounded-2xl text-center shadow-sm">
+                          <CheckCircle className="mx-auto text-emerald-500 mb-2" size={36}/>
+                          <p className="font-black text-emerald-800 mb-1 text-lg">제출 완료</p>
+                          <p className="text-xs text-gray-500 mb-5 font-medium">제출일시: {getDisplayDate(existingSigForSelectedTeacher)}</p>
+                          
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (deleteStep === 0) setDeleteStep(1);
+                              else confirmDeleteSignature(existingSigForSelectedTeacher.id);
+                            }}
+                            className={`w-full py-3.5 font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 ${
+                              deleteStep === 0 
+                                ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50' 
+                                : 'bg-red-500 text-white hover:bg-red-600 animate-pulse'
+                            }`}
+                          >
+                            <Trash2 size={16}/>
+                            {deleteStep === 0 ? '잘못 제출했습니다 (삭제 후 재서명)' : '정말 삭제하시겠습니까? (클릭 시 즉시 삭제)'}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="animate-fade-in space-y-3 pt-2">
+                          <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2">Signature</label>
+                          <SignaturePad onSave={setSignatureData} />
+                          <button type="submit" disabled={isSaving || !signatureData} className="w-full py-5 bg-gray-900 text-white rounded-[1.5rem] font-black text-lg shadow-xl shadow-gray-200 hover:bg-black transition-all active:scale-95 disabled:bg-gray-300 flex items-center justify-center gap-2 mt-4">
+                            {isSaving ? '클라우드에 안전하게 보존 중...' : <><Save size={20}/> 확인 및 서명 제출</>}
+                          </button>
+                          {submitError && <p className="text-red-500 text-xs font-bold text-center mt-2">{submitError}</p>}
+                        </div>
+                      )
                     )}
                   </div>
                 </form>
