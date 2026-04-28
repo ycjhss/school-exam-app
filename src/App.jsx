@@ -38,7 +38,7 @@ const defaultChecklistData = [
   { id: 12, type: 'item2', text: '3) 선행 출제 여부 동교과 상호 확인', status: 'O' }
 ];
 
-// 요일 및 시간 포맷팅 함수
+// 요일 및 시간 포맷팅 함수 (엑셀용 진짜 시간)
 const formatDateTime = (isoString) => {
   if (!isoString) return '';
   const date = new Date(isoString);
@@ -143,8 +143,9 @@ export default function App() {
   // 선택된 서명의 전체 공문서 출력용 팝업 상태
   const [selectedSubmission, setSelectedSubmission] = useState(null);
 
+  // 💡 관리자가 지정할 고사명과 서류 출력용 날짜 추가
   const defaultGlobalSettings = {
-    year: '2026', semester: '1', examOrder: '1', 
+    year: '2026', semester: '1', examName: '중간고사', documentDate: '2026. 4. 28.',
     adminPassword: '1234', 
     subjects: [
       { name: '국어', teachers: ['김국어', '이국어'] },
@@ -174,7 +175,7 @@ export default function App() {
   const [newChecklistType, setNewChecklistType] = useState('item1');
   const [newChecklistText, setNewChecklistText] = useState('');
 
-  // 1. 인증 초기화 (수정됨: Vercel과 Canvas 호환성 강화)
+  // 1. 인증 초기화
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -182,7 +183,6 @@ export default function App() {
           try {
             await signInWithCustomToken(auth, __initial_auth_token);
           } catch (tokenError) {
-            // 🚨 선생님의 커스텀 파이어베이스를 사용할 때 발생하는 토큰 불일치 에러를 잡고, 안전하게 익명 로그인으로 우회합니다.
             await signInAnonymously(auth);
           }
         } else {
@@ -259,9 +259,16 @@ export default function App() {
     if (!signatureData || !user) return;
     setIsSaving(true);
     try {
+      // 💡 진짜 제출 시간은 createdAt (serverTimestamp)로 클라우드에 안전하게 저장됩니다.
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'individualSignatures'), {
-        year: String(globalSettings.year), semester: String(globalSettings.semester), examOrder: String(globalSettings.examOrder),
-        subject: selectedSubject, teacherName: selectedTeacher, signatureData, createdAt: serverTimestamp(), uid: user.uid
+        year: String(globalSettings.year), 
+        semester: String(globalSettings.semester), 
+        examName: String(globalSettings.examName),
+        subject: selectedSubject, 
+        teacherName: selectedTeacher, 
+        signatureData, 
+        createdAt: serverTimestamp(), 
+        uid: user.uid
       });
       setSaveSuccess(true); setSelectedTeacher(''); setSignatureData(null); setResetSigCounter(c => c+1);
       setTimeout(() => { setSaveSuccess(false); setSelectedSubject(''); }, 3000);
@@ -305,13 +312,14 @@ export default function App() {
   };
 
   const handleExportCSV = () => {
-    let csv = "\uFEFF과목명,교사명,제출상태,서명시간\n";
+    let csv = "\uFEFF과목명,교사명,제출상태,서명(클라우드기록)시간\n";
     safeSubjects.forEach(subject => {
       const subjectSigs = currentExamSignatures.filter(s => s.subject === subject.name);
       subject.teachers.forEach(teacher => {
         const sig = subjectSigs.find(s => s.teacherName === teacher);
         const status = sig ? "제출완료" : "미제출";
-        const date = sig?.createdAt?.toDate ? sig.createdAt.toDate().toLocaleString() : "";
+        // 💡 엑셀에서는 진짜 제출 시간을 보여줍니다.
+        const date = sig?.createdAt?.toDate ? formatDateTime(sig.createdAt.toDate().toISOString()) : "";
         csv += `${subject.name},${teacher},${status},${date}\n`;
       });
     });
@@ -319,24 +327,25 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `출제검토현황_${globalSettings.year}_${globalSettings.semester}학기_${globalSettings.examOrder}차.csv`;
+    link.download = `출제검토현황_${globalSettings.year}_${globalSettings.semester}학기_${globalSettings.examName}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
   const togglePrintStatus = async (subjectName, isCurrentlyPrinted) => {
-    const docId = `${globalSettings.year}_${globalSettings.semester}_${globalSettings.examOrder}_${subjectName}`;
+    const docId = `${globalSettings.year}_${globalSettings.semester}_${globalSettings.examName}_${subjectName}`;
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'printStatuses', docId);
     try {
       if (isCurrentlyPrinted) await deleteDoc(docRef);
-      else await setDoc(docRef, { year: String(globalSettings.year), semester: String(globalSettings.semester), examOrder: String(globalSettings.examOrder), subjectName: subjectName, printedAt: new Date().toISOString() });
+      else await setDoc(docRef, { year: String(globalSettings.year), semester: String(globalSettings.semester), examName: String(globalSettings.examName), subjectName: subjectName, printedAt: new Date().toISOString() });
     } catch (error) {
       console.error("출력 상태 변경 오류:", error);
       alert("출력 상태 변경 중 오류가 발생했습니다. 파이어베이스 규칙을 확인하세요.");
     }
   };
 
+  // 관리자 설정 함수들
   const addSubject = () => {
     if(!newSubject.trim()) return;
     setAdminData(prev => ({ ...prev, subjects: [...prev.subjects, { name: newSubject.trim(), teachers: [] }] }));
@@ -376,7 +385,7 @@ export default function App() {
   const safeTeachers = safeSubjects.find(s => s.name === selectedSubject)?.teachers || [];
   const currentChecklist = globalSettings.checklist || defaultChecklistData;
   const currentExamSignatures = allSignatures.filter(s => 
-    s.year === String(globalSettings.year) && s.semester === String(globalSettings.semester) && s.examOrder === String(globalSettings.examOrder)
+    s.year === String(globalSettings.year) && s.semester === String(globalSettings.semester) && s.examName === String(globalSettings.examName)
   );
 
   const subjectSignaturesForTeacherView = currentExamSignatures.filter(s => s.subject === selectedSubject);
@@ -386,13 +395,15 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-100 selection:bg-blue-100 font-sans">
       
+      {/* 서류 출력용 팝업 */}
       {selectedSubmission && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 print:static print:block print:bg-white print:p-0 animate-fade-in overflow-y-auto" onClick={() => setSelectedSubmission(null)}>
           <div className="bg-white p-8 md:p-12 rounded-[2rem] max-w-3xl w-full shadow-2xl print:shadow-none print:rounded-none print:max-w-none print:w-full print:p-4 my-auto" onClick={e => e.stopPropagation()}>
             <div className="print:text-black">
               <h2 className="text-3xl font-black text-center mb-8 border-b-[3px] border-black pb-4 tracking-widest">출제 검토 확인서</h2>
               <div className="flex justify-between items-end mb-6 font-bold text-lg">
-                <div>{selectedSubmission.year}년 {selectedSubmission.semester}학기 {selectedSubmission.examOrder}차 고사</div>
+                {/* 💡 관리자가 지정한 고사명 출력 */}
+                <div>{selectedSubmission.year}년 {selectedSubmission.semester}학기 {selectedSubmission.examName}</div>
                 <div className="text-right leading-relaxed text-xl">
                   <span className="inline-block w-16 text-gray-600">과목:</span> {selectedSubmission.subject} <br/>
                   <span className="inline-block w-16 text-gray-600">성명:</span> {selectedSubmission.teacherName}
@@ -416,10 +427,9 @@ export default function App() {
                 </ul>
               </div>
               <div className="text-center mb-8">
-                <p className="text-xl font-bold mb-6">위 항목을 모두 확인하고 이상 없음을 확인합니다.</p>
-                <p className="text-gray-600 mb-4 text-sm font-medium">
-                  제출일시: {formatDateTime(selectedSubmission.createdAt?.toDate?.()?.toISOString() || new Date().toISOString())}
-                </p>
+                <p className="text-xl font-bold mb-2">위 항목을 모두 확인하고 이상 없음을 확인합니다.</p>
+                {/* 💡 관리자가 지정한 출력 날짜 적용 (글자 크기 동일하게) */}
+                <p className="text-xl font-bold mb-6">{globalSettings.documentDate}</p>
                 <div className="flex justify-center items-center gap-6 text-2xl font-black mt-12 relative">
                   확인자: {selectedSubmission.teacherName}
                   <div className="absolute ml-48 -mt-6">
@@ -477,7 +487,7 @@ export default function App() {
               <div className="bg-gradient-to-br from-blue-600 to-blue-800 text-white p-8 text-center relative overflow-hidden">
                 <h2 className="text-2xl font-black mb-2 relative z-10">출제 검토 확인서</h2>
                 <p className="text-blue-100 text-sm font-medium opacity-90 relative z-10">
-                  {String(globalSettings.year)}년 {String(globalSettings.semester)}학기 {String(globalSettings.examOrder)}차 고사
+                  {String(globalSettings.year)}년 {String(globalSettings.semester)}학기 {String(globalSettings.examName)}
                 </p>
               </div>
               
@@ -568,7 +578,7 @@ export default function App() {
                   <div>
                     <h2 className="text-2xl font-black text-gray-800">과목별 검토 제출 현황</h2>
                     <p className="text-gray-500 text-sm font-medium">
-                      {String(globalSettings.year)}년 {String(globalSettings.semester)}학기 {String(globalSettings.examOrder)}차 고사
+                      {String(globalSettings.year)}년 {String(globalSettings.semester)}학기 {String(globalSettings.examName)}
                     </p>
                   </div>
                 </div>
@@ -593,7 +603,7 @@ export default function App() {
                   const printRecord = printStatuses.find(p => 
                     p.year === String(globalSettings.year) && 
                     p.semester === String(globalSettings.semester) && 
-                    p.examOrder === String(globalSettings.examOrder) && 
+                    p.examName === String(globalSettings.examName) && 
                     p.subjectName === subject.name
                   );
 
@@ -688,22 +698,27 @@ export default function App() {
 
               <div className="space-y-8">
                 
-                <div className="grid grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-xs font-black text-gray-500 mb-2">연도</label>
-                    <input type="text" value={adminData.year} onChange={e=>setAdminData({...adminData, year: e.target.value})} className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-center font-bold focus:border-purple-500 outline-none"/>
+                {/* 💡 관리자 기본 설정: 고사명과 날짜 추가 */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="md:col-span-1">
+                    <label className="block text-[10px] font-black text-gray-500 mb-2">연도</label>
+                    <input type="text" value={adminData.year} onChange={e=>setAdminData({...adminData, year: e.target.value})} className="w-full p-2.5 bg-gray-50 border-2 border-gray-100 rounded-xl text-center text-sm font-bold focus:border-purple-500 outline-none"/>
                   </div>
-                  <div>
-                    <label className="block text-xs font-black text-gray-500 mb-2">학기</label>
-                    <input type="text" value={adminData.semester} onChange={e=>setAdminData({...adminData, semester: e.target.value})} className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-center font-bold focus:border-purple-500 outline-none"/>
+                  <div className="md:col-span-1">
+                    <label className="block text-[10px] font-black text-gray-500 mb-2">학기</label>
+                    <input type="text" value={adminData.semester} onChange={e=>setAdminData({...adminData, semester: e.target.value})} className="w-full p-2.5 bg-gray-50 border-2 border-gray-100 rounded-xl text-center text-sm font-bold focus:border-purple-500 outline-none"/>
                   </div>
-                  <div>
-                    <label className="block text-xs font-black text-gray-500 mb-2">시험 차수</label>
-                    <input type="text" value={adminData.examOrder} onChange={e=>setAdminData({...adminData, examOrder: e.target.value})} className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-center font-bold focus:border-purple-500 outline-none"/>
+                  <div className="md:col-span-1">
+                    <label className="block text-[10px] font-black text-gray-500 mb-2">고사명 (예: 중간고사)</label>
+                    <input type="text" value={adminData.examName} onChange={e=>setAdminData({...adminData, examName: e.target.value})} className="w-full p-2.5 bg-gray-50 border-2 border-gray-100 rounded-xl text-center text-sm font-bold focus:border-purple-500 outline-none"/>
                   </div>
-                  <div>
-                    <label className="block text-xs font-black text-purple-600 mb-2">관리자 비밀번호</label>
-                    <input type="text" value={adminData.adminPassword || '1234'} onChange={e=>setAdminData({...adminData, adminPassword: e.target.value})} className="w-full p-3 bg-purple-50 border-2 border-purple-100 text-purple-700 rounded-xl text-center font-black focus:border-purple-500 outline-none"/>
+                  <div className="md:col-span-1">
+                    <label className="block text-[10px] font-black text-gray-500 mb-2">출력용 날짜</label>
+                    <input type="text" value={adminData.documentDate} onChange={e=>setAdminData({...adminData, documentDate: e.target.value})} className="w-full p-2.5 bg-gray-50 border-2 border-gray-100 rounded-xl text-center text-sm font-bold focus:border-purple-500 outline-none"/>
+                  </div>
+                  <div className="col-span-2 md:col-span-1">
+                    <label className="block text-[10px] font-black text-purple-600 mb-2">관리자 비밀번호</label>
+                    <input type="text" value={adminData.adminPassword || '1234'} onChange={e=>setAdminData({...adminData, adminPassword: e.target.value})} className="w-full p-2.5 bg-purple-50 border-2 border-purple-100 text-purple-700 rounded-xl text-center text-sm font-black focus:border-purple-500 outline-none"/>
                   </div>
                 </div>
 
