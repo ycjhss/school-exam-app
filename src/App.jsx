@@ -174,11 +174,20 @@ export default function App() {
   const [newChecklistType, setNewChecklistType] = useState('item1');
   const [newChecklistText, setNewChecklistText] = useState('');
 
-  // 1. 인증 초기화
+  // 1. 인증 초기화 (수정됨: Vercel과 Canvas 호환성 강화)
   useEffect(() => {
     const initAuth = async () => {
       try {
-        await signInAnonymously(auth);
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          try {
+            await signInWithCustomToken(auth, __initial_auth_token);
+          } catch (tokenError) {
+            // 🚨 선생님의 커스텀 파이어베이스를 사용할 때 발생하는 토큰 불일치 에러를 잡고, 안전하게 익명 로그인으로 우회합니다.
+            await signInAnonymously(auth);
+          }
+        } else {
+          await signInAnonymously(auth);
+        }
       } catch (e) { 
         console.error("인증 에러 (파이어베이스 키를 확인하세요):", e); 
       }
@@ -257,9 +266,8 @@ export default function App() {
       setSaveSuccess(true); setSelectedTeacher(''); setSignatureData(null); setResetSigCounter(c => c+1);
       setTimeout(() => { setSaveSuccess(false); setSelectedSubject(''); }, 3000);
     } catch (e) { 
-      // 🚨 가짜 성공 코드를 제거하고 진짜 에러를 표시합니다.
       console.error("제출 에러:", e);
-      alert("데이터베이스 연결 오류입니다. 관리자에게 파이어베이스 설정값을 확인해 달라고 요청하세요!");
+      alert("데이터베이스 연결 오류입니다. 관리자에게 파이어베이스 규칙 설정을 확인해 달라고 요청하세요!");
     }
     setIsSaving(false);
   };
@@ -270,9 +278,8 @@ export default function App() {
       setAdminMessage({ type: 'success', text: '설정이 안전하게 저장되었습니다.' });
       setTimeout(() => setAdminMessage({ type: '', text: '' }), 3000);
     } catch (e) {
-      // 🚨 에러 내용을 명확히 표시합니다.
       console.error("저장 에러:", e);
-      setAdminMessage({ type: 'error', text: '저장 실패: 파이어베이스 연결 설정이 올바른지 확인하세요.' });
+      setAdminMessage({ type: 'error', text: '저장 실패: 파이어베이스 규칙(Rules) 설정이 올바른지 확인하세요.' });
       setTimeout(() => setAdminMessage({ type: '', text: '' }), 5000);
     }
   };
@@ -326,11 +333,10 @@ export default function App() {
       else await setDoc(docRef, { year: String(globalSettings.year), semester: String(globalSettings.semester), examOrder: String(globalSettings.examOrder), subjectName: subjectName, printedAt: new Date().toISOString() });
     } catch (error) {
       console.error("출력 상태 변경 오류:", error);
-      alert("출력 상태 변경 중 오류가 발생했습니다. 파이어베이스 설정을 확인하세요.");
+      alert("출력 상태 변경 중 오류가 발생했습니다. 파이어베이스 규칙을 확인하세요.");
     }
   };
 
-  // 관리자 설정 함수들
   const addSubject = () => {
     if(!newSubject.trim()) return;
     setAdminData(prev => ({ ...prev, subjects: [...prev.subjects, { name: newSubject.trim(), teachers: [] }] }));
@@ -366,7 +372,6 @@ export default function App() {
     }));
   };
 
-  // 기본 파생 데이터
   const safeSubjects = Array.isArray(globalSettings.subjects) ? globalSettings.subjects : [];
   const safeTeachers = safeSubjects.find(s => s.name === selectedSubject)?.teachers || [];
   const currentChecklist = globalSettings.checklist || defaultChecklistData;
