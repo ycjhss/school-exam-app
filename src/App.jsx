@@ -45,12 +45,11 @@ const defaultChecklistData = [
   { id: 18, type: 'item1', text: '다. 하위문항의 개수를 분명하게 인식하도록 출제', status: 'O' }
 ];
 
-// 💡 날짜 포맷팅 시 에러가 나지 않도록 철저한 방어벽 추가
 const formatDateTime = (isoString) => {
   if (!isoString) return '';
   try {
     const date = new Date(isoString);
-    if (isNaN(date.getTime())) return ''; // 유효하지 않은 날짜인 경우 빈칸 반환
+    if (isNaN(date.getTime())) return '';
     const days = ['일', '월', '화', '수', '목', '금', '토'];
     const yy = String(date.getFullYear()).slice(2);
     const mm = date.getMonth() + 1;
@@ -64,7 +63,6 @@ const formatDateTime = (isoString) => {
   }
 };
 
-// 💡 파이어베이스 Timestamp 오류로 인한 흰 화면 방지용 함수 추가
 const getDisplayDate = (sig) => {
   if (!sig || !sig.createdAt) return '';
   try {
@@ -83,7 +81,15 @@ const getDisplayDate = (sig) => {
   return '';
 };
 
-// 💡 캔버스 에러를 100% 차단하는 서명 패드
+// undefined 문구를 예쁘게 처리하는 도우미 함수
+const formatExamOption = (opt) => {
+  const [y, s, e] = opt.split('|');
+  const displayY = y === 'undefined' ? '?' : y;
+  const displayS = s === 'undefined' ? '?' : s;
+  const displayE = e === 'undefined' ? '(구버전 기록)' : e;
+  return `${displayY}년 ${displayS}학기 ${displayE}`;
+};
+
 const SignaturePad = ({ onSave }) => {
   const canvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -93,12 +99,11 @@ const SignaturePad = ({ onSave }) => {
     if (!canvas || !canvas.parentElement) return;
     const rect = canvas.parentElement.getBoundingClientRect();
     
-    // 크기를 먼저 지정한 후 선 속성을 설정해야 초기화되지 않습니다.
     if (canvas.width !== rect.width) canvas.width = rect.width;
     if (canvas.height !== 160) canvas.height = 160;
 
     const ctx = canvas.getContext('2d');
-    if (!ctx) return; // ctx가 없을 때의 치명적 에러(흰화면) 방지
+    if (!ctx) return; 
     ctx.lineWidth = 4;
     ctx.lineCap = 'round';
     ctx.strokeStyle = '#000';
@@ -114,7 +119,6 @@ const SignaturePad = ({ onSave }) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    // 모바일 터치 이벤트 안전 처리
     const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
     return { x: clientX - rect.left, y: clientY - rect.top };
@@ -343,19 +347,20 @@ export default function App() {
     }
   };
 
+  // 💡 undefined 불량 데이터를 완벽하게 찾아 삭제하도록 String() 변환 비교 적용
   const executeDeleteExamRecords = async (examKey) => {
     const [dYear, dSem, dExam] = examKey.split('|');
     try {
-      const sigsToDelete = allSignatures.filter(s => s.year === dYear && s.semester === dSem && s.examName === dExam);
+      const sigsToDelete = allSignatures.filter(s => String(s.year) === dYear && String(s.semester) === dSem && String(s.examName) === dExam);
       for (const sig of sigsToDelete) {
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'individualSignatures', sig.id));
       }
-      const printsToDelete = printStatuses.filter(p => p.year === dYear && p.semester === dSem && p.examName === dExam);
+      const printsToDelete = printStatuses.filter(p => String(p.year) === dYear && String(p.semester) === dSem && String(p.examName) === dExam);
       for (const p of printsToDelete) {
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'printStatuses', p.id));
       }
       setDeleteExamKey(null);
-      setAdminMessage({ type: 'success', text: `${dYear}년 ${dSem}학기 ${dExam} 기록이 영구 삭제되었습니다.` });
+      setAdminMessage({ type: 'success', text: `과거 기록이 영구 삭제되었습니다.` });
       setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000);
     } catch (e) {
       console.error(e);
@@ -391,7 +396,8 @@ export default function App() {
   const [vYear, vSem, vExam] = (viewingExamKey || `${globalSettings.year || '2026'}|${globalSettings.semester || '1'}|${globalSettings.examName || '1차 정기시험'}`).split('|');
   const isViewingCurrent = viewingExamKey === `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`;
   
-  const viewingSignatures = allSignatures.filter(s => s.year === vYear && s.semester === vSem && s.examName === vExam);
+  // 💡 조회 필터에도 String() 변환을 적용하여 구버전 기록도 볼 수 있게 함
+  const viewingSignatures = allSignatures.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
   
   let subjectsToDisplay = Array.isArray(globalSettings.subjects) ? [...globalSettings.subjects] : [];
   if (!isViewingCurrent) {
@@ -476,7 +482,9 @@ export default function App() {
   const safeSubjects = Array.isArray(globalSettings.subjects) ? globalSettings.subjects : [];
   const safeTeachers = safeSubjects.find(s => s.name === selectedSubject)?.teachers || [];
   const currentExamSignatures = allSignatures.filter(s => 
-    s.year === String(globalSettings.year) && s.semester === String(globalSettings.semester) && s.examName === String(globalSettings.examName)
+    String(s.year) === String(globalSettings.year) && 
+    String(s.semester) === String(globalSettings.semester) && 
+    String(s.examName) === String(globalSettings.examName)
   );
 
   const subjectSignaturesForTeacherView = currentExamSignatures.filter(s => s.subject === selectedSubject);
@@ -493,7 +501,7 @@ export default function App() {
             <div className="print:text-black">
               <h2 className="text-3xl font-black text-center mb-8 tracking-[0.2em]">지필평가 출제 검토 확인서</h2>
               <p className="text-lg font-bold leading-relaxed mb-4 text-justify">
-                본인은 {selectedSubmission.year}년 {selectedSubmission.semester}학기 {selectedSubmission.examName} {selectedSubmission.subject}과 시험문제를 출제함에 있어 아래 표와 같은 내용을 검토하였음을 확인합니다.
+                본인은 {selectedSubmission.year === 'undefined' ? '?' : selectedSubmission.year}년 {selectedSubmission.semester === 'undefined' ? '?' : selectedSubmission.semester}학기 {selectedSubmission.examName === 'undefined' ? '' : selectedSubmission.examName} {selectedSubmission.subject}과 시험문제를 출제함에 있어 아래 표와 같은 내용을 검토하였음을 확인합니다.
               </p>
 
               <table className="w-full border-collapse border-2 border-black mb-10 text-[15px] print:text-[14px]">
@@ -710,10 +718,9 @@ export default function App() {
                       onChange={(e) => setViewingExamKey(e.target.value)}
                       className="bg-transparent p-2 text-sm font-bold text-gray-700 outline-none pr-4"
                     >
-                      {examOptions.map(opt => {
-                        const [y, s, e] = opt.split('|');
-                        return <option key={opt} value={opt}>{y}년 {s}학기 {e}</option>
-                      })}
+                      {examOptions.map(opt => (
+                        <option key={opt} value={opt}>{formatExamOption(opt)}</option>
+                      ))}
                     </select>
                   </div>
 
@@ -729,7 +736,7 @@ export default function App() {
               </div>
 
               <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0">
-                {vYear}년 {vSem}학기 {vExam}
+                {formatExamOption(viewingExamKey || `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`)}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 print:grid-cols-2">
@@ -886,26 +893,25 @@ export default function App() {
                       <p className="text-sm text-gray-500 text-center py-2">기록된 시험이 없습니다.</p>
                     ) : (
                       <div className="space-y-2">
-                        {examOptions.map(opt => {
-                          const [y, s, e] = opt.split('|');
-                          return (
-                            <div key={opt} className="flex justify-between items-center bg-white p-3 rounded-xl border border-red-100 shadow-sm">
-                              <span className="font-bold text-gray-800 text-sm">{y}년 {s}학기 {e}</span>
-                              {deleteExamKey === opt ? (
-                                <div className="flex gap-2">
-                                  <button onClick={() => setDeleteExamKey(null)} className="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-300">취소</button>
-                                  <button onClick={() => executeDeleteExamRecords(opt)} className="px-3 py-1.5 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700 animate-pulse shadow-sm">
-                                    확인(영구삭제)
-                                  </button>
-                                </div>
-                              ) : (
-                                <button onClick={() => setDeleteExamKey(opt)} className="text-red-400 hover:text-red-600 flex items-center gap-1 text-xs font-bold bg-red-50 px-2 py-1 rounded-lg transition-colors border border-red-100">
-                                  <Trash2 size={14}/> 삭제
+                        {examOptions.map(opt => (
+                          <div key={opt} className="flex justify-between items-center bg-white p-3 rounded-xl border border-red-100 shadow-sm">
+                            <span className="font-bold text-gray-800 text-sm">
+                              {formatExamOption(opt)}
+                            </span>
+                            {deleteExamKey === opt ? (
+                              <div className="flex gap-2">
+                                <button onClick={() => setDeleteExamKey(null)} className="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-300">취소</button>
+                                <button onClick={() => executeDeleteExamRecords(opt)} className="px-3 py-1.5 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700 animate-pulse shadow-sm">
+                                  확인(영구삭제)
                                 </button>
-                              )}
-                            </div>
-                          );
-                        })}
+                              </div>
+                            ) : (
+                              <button onClick={() => setDeleteExamKey(opt)} className="text-red-400 hover:text-red-600 flex items-center gap-1 text-xs font-bold bg-red-50 px-2 py-1 rounded-lg transition-colors border border-red-100">
+                                <Trash2 size={14}/> 삭제
+                              </button>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
