@@ -210,7 +210,7 @@ export default function App() {
           if (!isDataLoaded) {
             setAdminData(prev => ({ ...prev, ...data }));
             setIsDataLoaded(true);
-            setViewingExamKey(`${data.year}|${data.semester}|${data.examName}`); 
+            setViewingExamKey(`${data.year || '2026'}|${data.semester || '1'}|${data.examName || '1차 정기시험'}`); 
           }
         } else {
           setIsDataLoaded(true);
@@ -239,7 +239,6 @@ export default function App() {
     return () => { unsubSigs(); unsubPrints(); };
   }, [user]);
 
-  // 관리자 모드 접속 함수
   const handleUnlockAdmin = (e) => {
     e.preventDefault();
     const currentPassword = globalSettings.adminPassword || '1234';
@@ -326,7 +325,8 @@ export default function App() {
     if(!bulkInput.trim()) return;
     const lines = bulkInput.split('\n');
     const newSubjectsMap = {};
-    adminData.subjects.forEach(s => { newSubjectsMap[s.name] = new Set(s.teachers); });
+    // 💡 안전한 순회를 위해 || [] 추가
+    (adminData.subjects || []).forEach(s => { newSubjectsMap[s.name] = new Set(s.teachers || []); });
     lines.forEach(line => {
       const parts = line.split('\t').map(p => p.trim()).filter(Boolean);
       if (parts.length > 0) {
@@ -343,10 +343,10 @@ export default function App() {
   };
 
   const allExamKeys = new Set(allSignatures.map(s => `${s.year}|${s.semester}|${s.examName}`));
-  allExamKeys.add(`${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`);
+  allExamKeys.add(`${globalSettings.year || '2026'}|${globalSettings.semester || '1'}|${globalSettings.examName || '1차 정기시험'}`);
   const examOptions = Array.from(allExamKeys).sort((a,b) => b.localeCompare(a)); 
 
-  const [vYear, vSem, vExam] = (viewingExamKey || `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`).split('|');
+  const [vYear, vSem, vExam] = (viewingExamKey || `${globalSettings.year || '2026'}|${globalSettings.semester || '1'}|${globalSettings.examName || '1차 정기시험'}`).split('|');
   const isViewingCurrent = viewingExamKey === `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`;
   
   const viewingSignatures = allSignatures.filter(s => s.year === vYear && s.semester === vSem && s.examName === vExam);
@@ -358,7 +358,7 @@ export default function App() {
       const existing = subjectsToDisplay.find(s => s.name === ps);
       const submittedTeachers = [...new Set(viewingSignatures.filter(s => s.subject === ps).map(s => s.teacherName))];
       return existing 
-        ? { ...existing, teachers: [...new Set([...existing.teachers, ...submittedTeachers])] }
+        ? { ...existing, teachers: [...new Set([...(existing.teachers || []), ...submittedTeachers])] }
         : { name: ps, teachers: submittedTeachers };
     });
     subjectsToDisplay = historicalSubjects;
@@ -368,7 +368,7 @@ export default function App() {
     let csv = "\uFEFF과목명,교사명,제출상태,서명(클라우드기록)시간\n";
     subjectsToDisplay.forEach(subject => {
       const subjectSigs = viewingSignatures.filter(s => s.subject === subject.name);
-      subject.teachers.forEach(teacher => {
+      (subject.teachers || []).forEach(teacher => {
         const sig = subjectSigs.find(s => s.teacherName === teacher);
         const status = sig ? "제출완료" : "미제출";
         const date = sig?.createdAt?.toDate ? formatDateTime(sig.createdAt.toDate().toISOString()) : "";
@@ -396,12 +396,52 @@ export default function App() {
     }
   };
 
+  // 💡 방어 코드 (안전 장치 추가)
+  const addSubject = () => {
+    if(!newSubject.trim()) return;
+    setAdminData(prev => ({ ...prev, subjects: [...(prev.subjects || []), { name: newSubject.trim(), teachers: [] }] }));
+    setNewSubject('');
+  };
+  const removeSubject = (subjectName) => {
+    setAdminData(prev => ({ ...prev, subjects: (prev.subjects || []).filter(s => s.name !== subjectName) }));
+  };
+  const addTeacherToSubject = (subjectName) => {
+    const teacherName = newTeachers[subjectName]?.trim();
+    if(!teacherName) return;
+    setAdminData(prev => ({ ...prev, subjects: (prev.subjects || []).map(s => s.name === subjectName ? { ...s, teachers: [...(s.teachers || []), teacherName] } : s) }));
+    setNewTeachers(prev => ({ ...prev, [subjectName]: '' }));
+  };
+  const removeTeacherFromSubject = (subjectName, teacherName) => {
+    setAdminData(prev => ({ ...prev, subjects: (prev.subjects || []).map(s => s.name === subjectName ? { ...s, teachers: (s.teachers || []).filter(t => t !== teacherName) } : s) }));
+  };
+  const addChecklistItem = () => {
+    if(!newChecklistText.trim()) return;
+    const newItem = { id: Date.now(), type: newChecklistType, text: newChecklistText.trim(), status: 'O' };
+    setAdminData(prev => ({ ...prev, checklist: [...(prev.checklist || defaultChecklistData), newItem] }));
+    setNewChecklistText('');
+  };
+  const removeChecklistItem = (id) => {
+    setAdminData(prev => ({ ...prev, checklist: (prev.checklist || defaultChecklistData).filter(item => item.id !== id) }));
+  };
+  const updateChecklistStatus = (id, newStatus) => {
+    setAdminData(prev => ({
+      ...prev,
+      checklist: (prev.checklist || defaultChecklistData).map(item =>
+        item.id === id ? { ...item, status: newStatus } : item
+      )
+    }));
+  };
+
+  const safeSubjects = Array.isArray(globalSettings.subjects) ? globalSettings.subjects : [];
+  const safeTeachers = safeSubjects.find(s => s.name === selectedSubject)?.teachers || [];
+  const currentChecklist = globalSettings.checklist || defaultChecklistData;
   const currentExamSignatures = allSignatures.filter(s => 
     s.year === String(globalSettings.year) && s.semester === String(globalSettings.semester) && s.examName === String(globalSettings.examName)
   );
+
   const subjectSignaturesForTeacherView = currentExamSignatures.filter(s => s.subject === selectedSubject);
-  const existingSigForSelectedTeacher = subjectSignaturesForTeacherView.find(s => s.teacherName === selectedTeacher);
-  const safeTeachers = subjectsToDisplay.find(s => s.name === selectedSubject)?.teachers || [];
+  const submittedNamesForSelectedSubject = subjectSignaturesForTeacherView.map(s => s.teacherName);
+  const availableTeachers = safeTeachers.filter(t => !submittedNamesForSelectedSubject.includes(t));
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-100 selection:bg-blue-100 font-sans">
@@ -475,7 +515,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 전체 메인 레이아웃 (팝업이 없을 때만 인쇄에 나타나게 설정) */}
+      {/* 전체 메인 레이아웃 */}
       <div className={`${selectedSubmission ? 'print:hidden' : ''} flex flex-col flex-1`}>
         <header className="bg-white/90 backdrop-blur-md sticky top-0 z-10 border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm print:hidden">
           <div className="flex items-center gap-3">
@@ -644,8 +684,8 @@ export default function App() {
                 {subjectsToDisplay.map(subject => {
                   const subjectSignatures = viewingSignatures.filter(s => s.subject === subject.name);
                   const submittedNames = subjectSignatures.map(s => s.teacherName);
-                  const totalCount = subject.teachers.length;
-                  const submittedCount = subject.teachers.filter(t => submittedNames.includes(t)).length;
+                  const totalCount = (subject.teachers || []).length;
+                  const submittedCount = (subject.teachers || []).filter(t => submittedNames.includes(t)).length;
                   const isComplete = totalCount > 0 && submittedCount === totalCount;
                   
                   const printRecord = printStatuses.find(p => 
@@ -662,10 +702,10 @@ export default function App() {
                       </div>
                       
                       <div className="flex flex-col gap-2 mt-4">
-                        {subject.teachers.length === 0 ? (
+                        {(subject.teachers || []).length === 0 ? (
                           <span className="text-xs text-gray-400">등록된 교사가 없습니다.</span>
                         ) : (
-                          subject.teachers.map(teacher => {
+                          (subject.teachers || []).map(teacher => {
                             const sigRecord = subjectSignatures.find(s => s.teacherName === teacher);
                             const hasSubmitted = !!sigRecord;
                             
@@ -885,7 +925,7 @@ export default function App() {
                   </div>
 
                   <div className="space-y-4">
-                    {adminData.subjects.map(subject => (
+                    {(adminData.subjects || []).map(subject => (
                       <div key={subject.name} className="bg-gray-50 border-2 border-gray-100 rounded-2xl p-4">
                         <div className="flex justify-between items-center border-b border-gray-200 pb-3 mb-3">
                           <span className="font-black text-lg text-purple-900">{subject.name}</span>
@@ -893,7 +933,7 @@ export default function App() {
                         </div>
                         
                         <div className="flex flex-wrap gap-2 mb-4">
-                          {subject.teachers.map(teacher => (
+                          {(subject.teachers || []).map(teacher => (
                             <span key={teacher} className="bg-white border border-gray-200 px-3 py-1.5 rounded-lg text-sm font-bold text-gray-700 flex items-center gap-2 shadow-sm">
                               {teacher}
                               <button onClick={()=>removeTeacherFromSubject(subject.name, teacher)} className="text-gray-400 hover:text-red-500"><X size={14}/></button>
