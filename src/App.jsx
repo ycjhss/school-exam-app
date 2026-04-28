@@ -236,15 +236,17 @@ export default function App() {
     return () => { unsubSigs(); unsubPrints(); };
   }, [user]);
 
-  // 교사가 바뀌면 삭제 확인 버튼 스텝 초기화
-  useEffect(() => { setDeleteStep(0); }, [selectedTeacher]);
-
   const handleUnlock = (e) => {
     e.preventDefault();
-    if (pinInput === globalSettings.adminPassword) {
-      setIsUnlocked(true); setPinError(false); setPinInput('');
+    // 💡 과거 데이터에 비밀번호가 없었을 경우를 대비해 기본값 '1234'로 안전하게 비교합니다.
+    const currentPassword = globalSettings.adminPassword || '1234';
+    if (pinInput === currentPassword) {
+      setIsUnlocked(true);
+      setPinError(false);
+      setPinInput('');
     } else {
-      setPinError(true); setPinInput('');
+      setPinError(true);
+      setPinInput('');
     }
   };
 
@@ -424,12 +426,19 @@ export default function App() {
               <div className="text-center mt-12 print:mt-16">
                 <p className="text-lg font-bold mb-6">위 항목을 모두 확인하고 이상 없음을 확인합니다.</p>
                 <p className="text-xl font-bold tracking-widest mb-10">{globalSettings.documentDate}</p>
-                <div className="flex justify-end items-center text-xl font-bold relative pr-8">
+                
+                {/* 💡 서명이 이름 바로 옆 '(서명/인)' 글자 위에 자연스럽게 겹치도록 수정 */}
+                <div className="flex justify-end items-center text-xl font-bold pr-4">
                   <span className="mr-8">확인 직위: 교사</span>
-                  <span className="mr-3">성명: {selectedSubmission.teacherName}</span>
-                  <span>(인)</span>
-                  <div className="absolute right-0 -mt-10 mr-4">
-                    <img src={selectedSubmission.signatureData} alt="서명" className="h-20 object-contain mix-blend-multiply" />
+                  <span className="mr-2">성명: {selectedSubmission.teacherName}</span>
+                  <div className="relative inline-flex items-center justify-center w-28 h-12 ml-2">
+                    <span className="z-0 text-gray-800">(서명/인)</span>
+                    <img 
+                      src={selectedSubmission.signatureData} 
+                      alt="서명" 
+                      className="absolute z-10 h-16 w-[140%] max-w-none object-contain mix-blend-multiply drop-shadow-sm pointer-events-none" 
+                      style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }} 
+                    />
                   </div>
                 </div>
               </div>
