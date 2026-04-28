@@ -66,7 +66,6 @@ const SignaturePad = ({ onSave, resetTrigger }) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    // 💡 서명 선 굵기를 3에서 4로 증가시켜 더 진하게 보이도록 설정
     ctx.lineWidth = 4;
     ctx.lineCap = 'round';
     ctx.strokeStyle = '#000';
@@ -142,6 +141,7 @@ export default function App() {
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [viewMode, setViewMode] = useState('teacher'); 
   
+  // 💡 관리자 전용 암호 상태
   const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
@@ -167,6 +167,7 @@ export default function App() {
   const [resetSigCounter, setResetSigCounter] = useState(0);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const [deleteStep, setDeleteStep] = useState(0); 
   
   const [adminData, setAdminData] = useState(defaultGlobalSettings);
@@ -178,6 +179,7 @@ export default function App() {
   const [printStatuses, setPrintStatuses] = useState([]); 
   const [newChecklistType, setNewChecklistType] = useState('item1');
   const [newChecklistText, setNewChecklistText] = useState('');
+  const [deleteExamKey, setDeleteExamKey] = useState(null);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -237,7 +239,7 @@ export default function App() {
     return () => { unsubSigs(); unsubPrints(); };
   }, [user]);
 
-  // 💡 관리자 모드 암호 확인 로직
+  // 관리자 모드 접속 함수
   const handleUnlockAdmin = (e) => {
     e.preventDefault();
     const currentPassword = globalSettings.adminPassword || '1234';
@@ -255,6 +257,7 @@ export default function App() {
     e.preventDefault();
     if (!signatureData || !user) return;
     setIsSaving(true);
+    setSubmitError('');
     try {
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'individualSignatures'), {
         year: String(globalSettings.year), 
@@ -270,7 +273,8 @@ export default function App() {
       setSaveSuccess(true); setSelectedTeacher(''); setSignatureData(null); setResetSigCounter(c => c+1);
       setTimeout(() => { setSaveSuccess(false); setSelectedSubject(''); }, 3000);
     } catch (e) { 
-      alert("연결 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+      setSubmitError("데이터베이스 연결 오류입니다. 관리자에게 문의하세요.");
+      setTimeout(() => setSubmitError(''), 4000);
     }
     setIsSaving(false);
   };
@@ -294,6 +298,28 @@ export default function App() {
     } catch (e) {
       setAdminMessage({ type: 'error', text: '저장에 실패했습니다.' });
       setTimeout(() => setAdminMessage({ type: '', text: '' }), 5000);
+    }
+  };
+
+  // 💡 과거 데이터 영구 삭제 함수
+  const executeDeleteExamRecords = async (examKey) => {
+    const [dYear, dSem, dExam] = examKey.split('|');
+    try {
+      const sigsToDelete = allSignatures.filter(s => s.year === dYear && s.semester === dSem && s.examName === dExam);
+      for (const sig of sigsToDelete) {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'individualSignatures', sig.id));
+      }
+      const printsToDelete = printStatuses.filter(p => p.year === dYear && p.semester === dSem && p.examName === dExam);
+      for (const p of printsToDelete) {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'printStatuses', p.id));
+      }
+      setDeleteExamKey(null);
+      setAdminMessage({ type: 'success', text: `${dYear}년 ${dSem}학기 ${dExam} 기록이 영구 삭제되었습니다.` });
+      setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000);
+    } catch (e) {
+      console.error(e);
+      setAdminMessage({ type: 'error', text: '삭제 중 오류가 발생했습니다.' });
+      setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000);
     }
   };
 
@@ -381,6 +407,7 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-100 selection:bg-blue-100 font-sans">
       
+      {/* 💡 서명 및 공문서 확인용 팝업 */}
       {selectedSubmission && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 md:p-8 print:static print:block print:bg-white print:p-0 animate-fade-in overflow-y-auto" onClick={() => setSelectedSubmission(null)}>
           <div className="bg-white p-10 md:p-14 rounded-none md:rounded-[2rem] max-w-4xl w-full shadow-2xl print:shadow-none print:max-w-none print:w-full print:p-0 my-auto" onClick={e => e.stopPropagation()}>
@@ -421,7 +448,6 @@ export default function App() {
                 <p className="text-lg font-bold mb-6">위 항목을 모두 확인하고 이상 없음을 확인합니다.</p>
                 <p className="text-xl font-bold tracking-widest mb-10">{globalSettings.documentDate}</p>
                 
-                {/* 💡 서명이 이름 바로 옆 '(서명/인)' 글자 위에 자연스럽게 겹치도록 수정 */}
                 <div className="flex justify-end items-center text-xl font-bold pr-4">
                   <span className="mr-8">확인 직위: 교사</span>
                   <span className="mr-2">성명: {selectedSubmission.teacherName}</span>
@@ -562,6 +588,7 @@ export default function App() {
                         <button type="submit" disabled={isSaving || !signatureData} className="w-full py-5 bg-gray-900 text-white rounded-[1.5rem] font-black text-lg shadow-xl shadow-gray-200 hover:bg-black transition-all active:scale-95 disabled:bg-gray-300 flex items-center justify-center gap-2 mt-4">
                           {isSaving ? '클라우드에 안전하게 보존 중...' : <><Save size={20}/> 확인 및 서명 제출</>}
                         </button>
+                        {submitError && <p className="text-red-500 text-xs font-bold text-center mt-2">{submitError}</p>}
                       </div>
                     )}
                   </div>
@@ -570,7 +597,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 2. 제출 현황 및 과거 기록 조회 화면 (비밀번호 없음) */}
+          {/* 2. 제출 현황 (비밀번호 없음) */}
           {viewMode === 'status' && (
             <div className="w-full max-w-4xl bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-8 md:p-10 animate-fade-in mt-4 print:shadow-none print:p-0 print:mt-0">
               
@@ -751,6 +778,45 @@ export default function App() {
                   <div className="col-span-2 md:col-span-1">
                     <label className="block text-[10px] font-black text-purple-600 mb-2">관리자 비밀번호</label>
                     <input type="text" value={adminData.adminPassword || '1234'} onChange={e=>setAdminData({...adminData, adminPassword: e.target.value})} className="w-full p-2.5 bg-purple-50 border-2 border-purple-100 text-purple-700 rounded-xl text-center text-sm font-black focus:border-purple-500 outline-none"/>
+                  </div>
+                </div>
+
+                {/* 💡 과거 시험 기록 삭제 영역 추가 */}
+                <div className="pt-4 border-t border-gray-100">
+                  <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
+                    <History size={20} className="text-red-500"/> 과거 시험 기록 관리 (삭제)
+                  </h3>
+                  <div className="bg-red-50/50 border-2 border-red-100 rounded-2xl p-4">
+                    <p className="text-xs font-bold text-red-600 mb-4">
+                      <AlertCircle size={14} className="inline mr-1 -mt-0.5"/> 
+                      테스트로 만든 기록이나 불필요한 과거 기록을 영구적으로 삭제할 수 있습니다. (복구 불가)
+                    </p>
+                    {examOptions.length === 0 ? (
+                      <p className="text-sm text-gray-500 text-center py-2">기록된 시험이 없습니다.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {examOptions.map(opt => {
+                          const [y, s, e] = opt.split('|');
+                          return (
+                            <div key={opt} className="flex justify-between items-center bg-white p-3 rounded-xl border border-red-100 shadow-sm">
+                              <span className="font-bold text-gray-800 text-sm">{y}년 {s}학기 {e}</span>
+                              {deleteExamKey === opt ? (
+                                <div className="flex gap-2">
+                                  <button onClick={() => setDeleteExamKey(null)} className="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-300">취소</button>
+                                  <button onClick={() => executeDeleteExamRecords(opt)} className="px-3 py-1.5 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700 animate-pulse shadow-sm">
+                                    확인(영구삭제)
+                                  </button>
+                                </div>
+                              ) : (
+                                <button onClick={() => setDeleteExamKey(opt)} className="text-red-400 hover:text-red-600 flex items-center gap-1 text-xs font-bold bg-red-50 px-2 py-1 rounded-lg transition-colors border border-red-100">
+                                  <Trash2 size={14}/> 삭제
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
 
