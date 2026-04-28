@@ -141,7 +141,7 @@ export default function App() {
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [viewMode, setViewMode] = useState('teacher'); 
   
-  // 💡 관리자 전용 암호 상태
+  // 관리자 전용 암호 상태
   const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
@@ -301,7 +301,6 @@ export default function App() {
     }
   };
 
-  // 💡 과거 데이터 영구 삭제 함수
   const executeDeleteExamRecords = async (examKey) => {
     const [dYear, dSem, dExam] = examKey.split('|');
     try {
@@ -476,6 +475,7 @@ export default function App() {
         </div>
       )}
 
+      {/* 전체 메인 레이아웃 (팝업이 없을 때만 인쇄에 나타나게 설정) */}
       <div className={`${selectedSubmission ? 'print:hidden' : ''} flex flex-col flex-1`}>
         <header className="bg-white/90 backdrop-blur-md sticky top-0 z-10 border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm print:hidden">
           <div className="flex items-center gap-3">
@@ -781,7 +781,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 💡 과거 시험 기록 삭제 영역 추가 */}
                 <div className="pt-4 border-t border-gray-100">
                   <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
                     <History size={20} className="text-red-500"/> 과거 시험 기록 관리 (삭제)
