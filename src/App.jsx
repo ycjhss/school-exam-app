@@ -8,9 +8,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, addDoc, onSnapshot, doc, serverTimestamp, setDoc, deleteDoc } from 'firebase/firestore';
 
-// 🚨 [가장 중요한 부분] 🚨
-// 아래 firebaseConfig 안의 내용을 선생님의 진짜 파이어베이스 설정값으로 전부 덮어씌워 주세요!
-// (따옴표 안에 있는 임시 글자들을 지우고 선생님의 값을 넣으시면 됩니다.)
+// 🚨 선생님의 파이어베이스 설정이 완벽하게 적용되었습니다! 🚨
 const firebaseConfig = {
   apiKey: "AIzaSyCUgfIQSpk_ifhQTUlj0EMU6jrutoRMq3U",
   authDomain: "timetablc.firebaseapp.com",
