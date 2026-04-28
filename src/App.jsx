@@ -8,7 +8,9 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, addDoc, onSnapshot, doc, serverTimestamp, setDoc, deleteDoc } from 'firebase/firestore';
 
-// --- Firebase 초기 설정 ---
+// 🚨 [가장 중요한 부분] 🚨
+// 아래 firebaseConfig 안의 내용을 선생님의 진짜 파이어베이스 설정값으로 전부 덮어씌워 주세요!
+// (따옴표 안에 있는 임시 글자들을 지우고 선생님의 값을 넣으시면 됩니다.)
 const firebaseConfig = {
   apiKey: "AIzaSyCUgfIQSpk_ifhQTUlj0EMU6jrutoRMq3U",
   authDomain: "timetablc.firebaseapp.com",
@@ -17,13 +19,13 @@ const firebaseConfig = {
   messagingSenderId: "71494017661",
   appId: "1:71494017661:web:599b1471ba4a0663328714"
 };
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// 🚨 앱 ID 고정: Vercel 배포 시 데이터가 날아가지 않도록 고정값을 유지합니다.
-const rawAppId = typeof __app_id !== 'undefined' ? __app_id : "school-exam-final-v2";
-const appId = String(rawAppId).split('/')[0];
+// 앱 ID 고정
+const appId = "school-exam-final-v2";
 
 const defaultChecklistData = [
   { id: 1, type: 'category', text: '1. 시험 문제 출제 원칙' },
@@ -178,12 +180,10 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (e) { console.error(e); }
+        await signInAnonymously(auth);
+      } catch (e) { 
+        console.error("인증 에러 (파이어베이스 키를 확인하세요):", e); 
+      }
     };
     initAuth();
     const unsubscribe = onAuthStateChanged(auth, setUser);
@@ -206,7 +206,9 @@ export default function App() {
           setIsDataLoaded(true);
         }
       },
-      (err) => console.error(err)
+      (err) => {
+        console.error("데이터 불러오기 에러 (파이어베이스 설정을 확인하세요):", err);
+      }
     );
   }, [user, isDataLoaded]);
 
@@ -257,8 +259,9 @@ export default function App() {
       setSaveSuccess(true); setSelectedTeacher(''); setSignatureData(null); setResetSigCounter(c => c+1);
       setTimeout(() => { setSaveSuccess(false); setSelectedSubject(''); }, 3000);
     } catch (e) { 
-      setSaveSuccess(true); setSelectedTeacher(''); setSignatureData(null); setResetSigCounter(c => c+1);
-      setTimeout(() => { setSaveSuccess(false); setSelectedSubject(''); }, 3000);
+      // 🚨 가짜 성공 코드를 제거하고 진짜 에러를 표시합니다.
+      console.error("제출 에러:", e);
+      alert("데이터베이스 연결 오류입니다. 관리자에게 파이어베이스 설정값을 확인해 달라고 요청하세요!");
     }
     setIsSaving(false);
   };
@@ -269,9 +272,10 @@ export default function App() {
       setAdminMessage({ type: 'success', text: '설정이 안전하게 저장되었습니다.' });
       setTimeout(() => setAdminMessage({ type: '', text: '' }), 3000);
     } catch (e) {
-      setAdminMessage({ type: 'error', text: '오류가 발생했습니다.' });
-      setGlobalSettings(adminData);
-      setTimeout(() => setAdminMessage({ type: '', text: '' }), 3000);
+      // 🚨 에러 내용을 명확히 표시합니다.
+      console.error("저장 에러:", e);
+      setAdminMessage({ type: 'error', text: '저장 실패: 파이어베이스 연결 설정이 올바른지 확인하세요.' });
+      setTimeout(() => setAdminMessage({ type: '', text: '' }), 5000);
     }
   };
 
@@ -324,7 +328,7 @@ export default function App() {
       else await setDoc(docRef, { year: String(globalSettings.year), semester: String(globalSettings.semester), examOrder: String(globalSettings.examOrder), subjectName: subjectName, printedAt: new Date().toISOString() });
     } catch (error) {
       console.error("출력 상태 변경 오류:", error);
-      alert("출력 상태 변경 중 오류가 발생했습니다.");
+      alert("출력 상태 변경 중 오류가 발생했습니다. 파이어베이스 설정을 확인하세요.");
     }
   };
 
@@ -355,8 +359,6 @@ export default function App() {
   const removeChecklistItem = (id) => {
     setAdminData(prev => ({ ...prev, checklist: (prev.checklist || defaultChecklistData).filter(item => item.id !== id) }));
   };
-  
-  // 💡 관리자 O/X 변경 함수
   const updateChecklistStatus = (id, newStatus) => {
     setAdminData(prev => ({
       ...prev,
@@ -374,7 +376,6 @@ export default function App() {
     s.year === String(globalSettings.year) && s.semester === String(globalSettings.semester) && s.examOrder === String(globalSettings.examOrder)
   );
 
-  // 💡 교사용 제출 명단 필터링 (이미 제출한 사람은 드롭다운에서 숨김)
   const subjectSignaturesForTeacherView = currentExamSignatures.filter(s => s.subject === selectedSubject);
   const submittedNamesForSelectedSubject = subjectSignaturesForTeacherView.map(s => s.teacherName);
   const availableTeachers = safeTeachers.filter(t => !submittedNamesForSelectedSubject.includes(t));
@@ -382,25 +383,18 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-100 selection:bg-blue-100 font-sans">
       
-      {/* 💡 개별 공문서(출제 검토 확인서) 인쇄용 모달 팝업 */}
       {selectedSubmission && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 print:static print:block print:bg-white print:p-0 animate-fade-in overflow-y-auto" onClick={() => setSelectedSubmission(null)}>
           <div className="bg-white p-8 md:p-12 rounded-[2rem] max-w-3xl w-full shadow-2xl print:shadow-none print:rounded-none print:max-w-none print:w-full print:p-4 my-auto" onClick={e => e.stopPropagation()}>
-            
-            {/* --- 실제 종이에 출력될 영역 시작 --- */}
             <div className="print:text-black">
               <h2 className="text-3xl font-black text-center mb-8 border-b-[3px] border-black pb-4 tracking-widest">출제 검토 확인서</h2>
-              
               <div className="flex justify-between items-end mb-6 font-bold text-lg">
-                <div>
-                  {selectedSubmission.year}년 {selectedSubmission.semester}학기 {selectedSubmission.examOrder}차 고사
-                </div>
+                <div>{selectedSubmission.year}년 {selectedSubmission.semester}학기 {selectedSubmission.examOrder}차 고사</div>
                 <div className="text-right leading-relaxed text-xl">
                   <span className="inline-block w-16 text-gray-600">과목:</span> {selectedSubmission.subject} <br/>
                   <span className="inline-block w-16 text-gray-600">성명:</span> {selectedSubmission.teacherName}
                 </div>
               </div>
-
               <div className="border-t-[3px] border-black border-b-[3px] py-6 mb-8">
                 <ul className="space-y-4 text-lg">
                   {currentChecklist.map(item => (
@@ -418,7 +412,6 @@ export default function App() {
                   ))}
                 </ul>
               </div>
-
               <div className="text-center mb-8">
                 <p className="text-xl font-bold mb-6">위 항목을 모두 확인하고 이상 없음을 확인합니다.</p>
                 <p className="text-gray-600 mb-4 text-sm font-medium">
@@ -432,8 +425,6 @@ export default function App() {
                 </div>
               </div>
             </div>
-            {/* --- 실제 종이에 출력될 영역 끝 --- */}
-
             <div className="flex gap-4 mt-12 pt-6 border-t border-gray-100 print:hidden">
               <button onClick={() => window.print()} className="flex-1 py-4 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-lg shadow-lg">
                 <Printer size={22}/> 이 확인서 인쇄하기
@@ -463,7 +454,6 @@ export default function App() {
 
         <main className="flex-1 flex flex-col items-center justify-start p-4 md:p-8 animate-fade-in relative z-0 print:p-0">
           
-          {/* 비밀번호 확인 화면 */}
           {(viewMode === 'status' || viewMode === 'admin') && !isUnlocked && (
             <div className="w-full max-w-sm bg-white rounded-[2rem] shadow-xl p-8 mt-12 animate-fade-in text-center border border-gray-100 print:hidden">
               <div className="bg-blue-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -471,25 +461,14 @@ export default function App() {
               </div>
               <h2 className="text-xl font-black text-gray-800 mb-2">관리자 암호 확인</h2>
               <p className="text-sm text-gray-500 mb-6 font-medium">초기 비밀번호는 <strong className="text-blue-600">1234</strong> 입니다.</p>
-              
               <form onSubmit={handleUnlock}>
-                <input 
-                  type="password" 
-                  value={pinInput} 
-                  onChange={(e) => setPinInput(e.target.value)}
-                  placeholder="비밀번호 입력"
-                  className={`w-full p-4 bg-gray-50 border-2 rounded-xl text-center text-xl tracking-[0.5em] font-black outline-none transition-all ${pinError ? 'border-red-400 bg-red-50 text-red-600' : 'border-gray-200 focus:border-blue-500'}`}
-                  autoFocus
-                />
+                <input type="password" value={pinInput} onChange={(e) => setPinInput(e.target.value)} placeholder="비밀번호 입력" className={`w-full p-4 bg-gray-50 border-2 rounded-xl text-center text-xl tracking-[0.5em] font-black outline-none transition-all ${pinError ? 'border-red-400 bg-red-50 text-red-600' : 'border-gray-200 focus:border-blue-500'}`} autoFocus />
                 {pinError && <p className="text-xs font-bold text-red-500 mt-2">비밀번호가 일치하지 않습니다.</p>}
-                <button type="submit" className="w-full py-4 mt-6 bg-gray-900 text-white rounded-xl font-black shadow-md hover:bg-black transition-all">
-                  확인
-                </button>
+                <button type="submit" className="w-full py-4 mt-6 bg-gray-900 text-white rounded-xl font-black shadow-md hover:bg-black transition-all">확인</button>
               </form>
             </div>
           )}
 
-          {/* 1. 교사 서명 화면 */}
           {viewMode === 'teacher' && (
             <div className="w-full max-w-md bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] overflow-hidden border border-white relative mt-4">
               <div className="bg-gradient-to-br from-blue-600 to-blue-800 text-white p-8 text-center relative overflow-hidden">
@@ -522,7 +501,6 @@ export default function App() {
                             <span className={item.type === 'category' ? '' : 'relative before:content-["-"] before:absolute before:-left-2 before:text-gray-400 pl-2 pr-4 flex-1 leading-tight'}>
                               {item.text}
                             </span>
-                            {/* 💡 교사 화면 읽기 전용 [O] [X] 디자인 */}
                             {item.type !== 'category' && (
                               <span className="flex gap-1.5 shrink-0 mt-0.5">
                                 <span className={`w-5 h-5 flex items-center justify-center rounded border ${(item.status !== 'X') ? 'border-blue-500 bg-blue-50 text-blue-600 font-black' : 'border-gray-200 text-gray-300 font-bold'} text-[10px]`}>O</span>
@@ -545,7 +523,6 @@ export default function App() {
                       <div className="absolute right-4 bottom-4 pointer-events-none opacity-30"><Search size={18}/></div>
                     </div>
 
-                    {/* 💡 선택된 과목에 제출 가능한 교사가 있을 때만 이름 선택창 표시 */}
                     {selectedSubject && availableTeachers.length > 0 && (
                       <div className="animate-fade-in relative group">
                         <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1">Teacher</label>
@@ -557,7 +534,6 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* 💡 해당 과목의 모든 교사가 제출을 마쳤을 때 안내 문구 표시 */}
                     {selectedSubject && availableTeachers.length === 0 && (
                       <div className="animate-fade-in p-4 bg-emerald-50 border-2 border-emerald-100 rounded-2xl text-center">
                         <span className="text-emerald-600 font-black text-sm flex items-center justify-center gap-2">
@@ -581,10 +557,8 @@ export default function App() {
             </div>
           )}
 
-          {/* 2. 제출 현황판 */}
           {viewMode === 'status' && isUnlocked && (
             <div className="w-full max-w-4xl bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-8 md:p-10 animate-fade-in mt-4 print:shadow-none print:p-0 print:mt-0">
-              
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 border-b border-gray-100 pb-6 print:border-b-2 print:border-gray-800">
                 <div className="flex items-center gap-3">
                   <div className="bg-emerald-100 p-3 rounded-2xl print:hidden"><BarChart3 className="text-emerald-600" size={24}/></div>
@@ -595,7 +569,6 @@ export default function App() {
                     </p>
                   </div>
                 </div>
-                
                 <div className="flex items-center gap-2 print:hidden">
                   <button onClick={handleExportCSV} className="bg-blue-50 text-blue-700 px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-blue-100 transition-colors border border-blue-200">
                     <Download size={16} /> 엑셀 다운로드
@@ -681,7 +654,6 @@ export default function App() {
                   );
                 })}
               </div>
-              
               {safeSubjects.length === 0 && (
                 <div className="text-center py-12 bg-gray-50 rounded-3xl">
                   <p className="text-gray-500 font-bold">관리자 화면에서 과목과 교사 명단을 먼저 등록해 주세요.</p>
@@ -732,7 +704,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 💡 관리자용 O/X 체크리스트 설정 영역 */}
                 <div className="pt-4 border-t border-gray-100">
                   <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
                     <List size={20} className="text-purple-500"/> 출제 검토 항목(체크리스트) 관리
@@ -745,17 +716,10 @@ export default function App() {
                             {item.text}
                           </span>
                           <div className="flex items-center gap-3">
-                            {/* O/X 설정 버튼 (관리자 전용) */}
                             {item.type !== 'category' && (
                               <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
-                                <button
-                                  onClick={() => updateChecklistStatus(item.id, 'O')}
-                                  className={`px-3 py-1 text-xs font-black rounded-md transition-colors ${item.status !== 'X' ? 'bg-blue-500 text-white shadow-sm' : 'text-gray-400 hover:bg-gray-200'}`}
-                                >O</button>
-                                <button
-                                  onClick={() => updateChecklistStatus(item.id, 'X')}
-                                  className={`px-3 py-1 text-xs font-black rounded-md transition-colors ${item.status === 'X' ? 'bg-red-500 text-white shadow-sm' : 'text-gray-400 hover:bg-gray-200'}`}
-                                >X</button>
+                                <button onClick={() => updateChecklistStatus(item.id, 'O')} className={`px-3 py-1 text-xs font-black rounded-md transition-colors ${item.status !== 'X' ? 'bg-blue-500 text-white shadow-sm' : 'text-gray-400 hover:bg-gray-200'}`}>O</button>
+                                <button onClick={() => updateChecklistStatus(item.id, 'X')} className={`px-3 py-1 text-xs font-black rounded-md transition-colors ${item.status === 'X' ? 'bg-red-500 text-white shadow-sm' : 'text-gray-400 hover:bg-gray-200'}`}>X</button>
                               </div>
                             )}
                             <button onClick={() => removeChecklistItem(item.id)} className="text-gray-400 hover:text-red-500 transition-colors p-1" title="삭제">
