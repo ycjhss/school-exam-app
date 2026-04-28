@@ -139,6 +139,7 @@ export default function App() {
   const [newSubject, setNewSubject] = useState('');
   const [newTeachers, setNewTeachers] = useState({}); // { subjectName: 'teacher name' }
   const [adminMessage, setAdminMessage] = useState({ type: '', text: '' });
+  const [bulkInput, setBulkInput] = useState(''); // 엑셀 붙여넣기 상태
 
   useEffect(() => {
     const initAuth = async () => {
@@ -199,6 +200,43 @@ export default function App() {
       setGlobalSettings(adminData); // 화면에는 바로 반영
       setTimeout(() => setAdminMessage({ type: '', text: '' }), 3000);
     }
+  };
+
+  // 엑셀에서 복사한 데이터를 파싱하여 일괄 적용하는 기능
+  const handleBulkPaste = () => {
+    if(!bulkInput.trim()) return;
+    const lines = bulkInput.split('\n');
+    const newSubjectsMap = {};
+
+    // 기존 데이터 유지 병합
+    adminData.subjects.forEach(s => {
+      newSubjectsMap[s.name] = new Set(s.teachers);
+    });
+
+    lines.forEach(line => {
+      // 엑셀 복사 시 보통 탭(\t)으로 구분됨
+      const parts = line.split('\t').map(p => p.trim()).filter(Boolean);
+      if (parts.length > 0) {
+        const subjectName = parts[0];
+        if (!newSubjectsMap[subjectName]) {
+          newSubjectsMap[subjectName] = new Set();
+        }
+        // 두 번째 열부터는 모두 교사 이름으로 처리
+        for (let i = 1; i < parts.length; i++) {
+          newSubjectsMap[subjectName].add(parts[i]);
+        }
+      }
+    });
+
+    const updatedSubjects = Object.keys(newSubjectsMap).map(name => ({
+      name,
+      teachers: Array.from(newSubjectsMap[name])
+    }));
+
+    setAdminData(prev => ({ ...prev, subjects: updatedSubjects }));
+    setBulkInput('');
+    setAdminMessage({ type: 'success', text: '엑셀 명단이 적용되었습니다. 아래 목록 확인 후 [설정 저장하기]를 눌러주세요.' });
+    setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000);
   };
 
   const addSubject = () => {
@@ -269,18 +307,22 @@ export default function App() {
             ) : (
               <form onSubmit={handleTeacherSubmit} className="p-8 space-y-6">
                 
-                {/* 누락되었던 실제 체크리스트 영역 추가 */}
-                <div className="bg-gray-50 border border-gray-100 p-4 rounded-2xl h-48 overflow-y-auto custom-scrollbar">
-                  <p className="text-xs font-black text-blue-600 mb-3 sticky top-0 bg-gray-50 pb-2 border-b border-gray-200">
-                    아래 항목을 모두 확인했습니다.
-                  </p>
-                  <ul className="space-y-2 text-sm text-gray-600">
-                    {defaultChecklistData.map(item => (
-                      <li key={item.id} className={`${item.type === 'category' ? 'font-bold text-gray-800 mt-4 text-base' : 'pl-3 relative before:content-["-"] before:absolute before:left-0 before:text-gray-400'}`}>
-                        {item.text}
-                      </li>
-                    ))}
-                  </ul>
+                {/* 💡 스크롤 영역과 헤더 분리: 헤더가 맨 위에 고정됩니다. */}
+                <div className="border border-gray-200 rounded-2xl h-48 flex flex-col bg-white overflow-hidden shadow-sm">
+                  <div className="bg-blue-50/50 p-3 border-b border-gray-200 shrink-0 z-10">
+                    <p className="text-xs font-black text-blue-700 text-center">
+                      아래 항목을 모두 확인했습니다.
+                    </p>
+                  </div>
+                  <div className="p-4 overflow-y-auto custom-scrollbar flex-1 bg-gray-50">
+                    <ul className="space-y-2 text-sm text-gray-600">
+                      {defaultChecklistData.map(item => (
+                        <li key={item.id} className={`${item.type === 'category' ? 'font-bold text-gray-800 mt-4 text-base' : 'pl-3 relative before:content-["-"] before:absolute before:left-0 before:text-gray-400'}`}>
+                          {item.text}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
 
                 <div className="space-y-5">
@@ -319,7 +361,7 @@ export default function App() {
           </div>
         )}
         
-        {/* 관리자 설정 화면 (새로 구현됨) */}
+        {/* 관리자 설정 화면 */}
         {viewMode === 'admin' && (
           <div className="w-full max-w-2xl bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-8 md:p-10 animate-fade-in mt-4">
             <div className="flex items-center gap-3 mb-8 border-b border-gray-100 pb-6">
@@ -354,12 +396,35 @@ export default function App() {
               </div>
 
               <div>
-                <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2"><Users size={20} className="text-purple-500"/> 과목 및 교사 명단</h3>
+                <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2"><Users size={20} className="text-purple-500"/> 과목 및 교사 명단 설정</h3>
+
+                {/* 💡 새로 추가된 엑셀 대량 등록 영역 */}
+                <div className="mb-6 p-5 bg-purple-50/50 border border-purple-100 rounded-2xl">
+                  <h4 className="text-sm font-black text-purple-900 mb-2 flex items-center gap-2">
+                    <FileText size={16}/> 엑셀 명단 대량 붙여넣기
+                  </h4>
+                  <p className="text-xs text-purple-700 mb-3 opacity-80">
+                    엑셀에서 <strong>[과목명] [교사명1] [교사명2]...</strong> 형태의 표를 복사해 아래에 붙여넣고 적용 버튼을 누르세요. 기존 목록과 자동으로 합쳐집니다.
+                  </p>
+                  <textarea
+                    value={bulkInput}
+                    onChange={e => setBulkInput(e.target.value)}
+                    placeholder="예시)&#13;&#10;국어&#9;홍길동&#9;이순신&#13;&#10;수학&#9;강감찬"
+                    className="w-full h-24 p-3 bg-white border border-purple-200 rounded-xl text-sm outline-none focus:border-purple-500 resize-none custom-scrollbar"
+                  />
+                  <button
+                    onClick={handleBulkPaste}
+                    type="button"
+                    className="mt-3 px-4 py-2 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700 transition-all shadow-sm active:scale-95"
+                  >
+                    명단 일괄 적용하기
+                  </button>
+                </div>
                 
                 {/* 과목 추가 입력칸 */}
                 <div className="flex gap-2 mb-6">
-                  <input type="text" value={newSubject} onChange={e=>setNewSubject(e.target.value)} placeholder="새 과목명 (예: 역사)" className="flex-1 p-3 bg-white border-2 border-gray-200 rounded-xl text-sm font-bold focus:border-purple-500 outline-none"/>
-                  <button onClick={addSubject} className="bg-purple-600 text-white px-5 rounded-xl font-bold hover:bg-purple-700 transition-all shadow-md active:scale-95 whitespace-nowrap">과목 추가</button>
+                  <input type="text" value={newSubject} onChange={e=>setNewSubject(e.target.value)} placeholder="새 과목 직접 추가 (예: 역사)" className="flex-1 p-3 bg-white border-2 border-gray-200 rounded-xl text-sm font-bold focus:border-purple-500 outline-none"/>
+                  <button onClick={addSubject} className="bg-gray-800 text-white px-5 rounded-xl font-bold hover:bg-black transition-all shadow-md active:scale-95 whitespace-nowrap">과목 추가</button>
                 </div>
 
                 {/* 과목 리스트 */}
@@ -381,7 +446,7 @@ export default function App() {
                       </div>
 
                       <div className="flex gap-2">
-                        <input type="text" value={newTeachers[subject.name] || ''} onChange={e=>setNewTeachers({...newTeachers, [subject.name]: e.target.value})} placeholder="교사 성함" className="flex-1 p-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:border-purple-500 outline-none"/>
+                        <input type="text" value={newTeachers[subject.name] || ''} onChange={e=>setNewTeachers({...newTeachers, [subject.name]: e.target.value})} placeholder="교사 성함 직접 추가" className="flex-1 p-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:border-purple-500 outline-none"/>
                         <button onClick={()=>addTeacherToSubject(subject.name)} className="bg-gray-200 text-gray-700 px-4 rounded-lg font-bold hover:bg-gray-300 transition-all text-sm flex items-center gap-1"><Plus size={16}/> 추가</button>
                       </div>
                     </div>
@@ -390,7 +455,7 @@ export default function App() {
               </div>
 
               <button onClick={handleAdminSave} className="w-full py-5 bg-purple-600 text-white rounded-2xl font-black text-lg shadow-xl shadow-purple-200 hover:bg-purple-700 transition-all active:scale-95 flex items-center justify-center gap-2 mt-8">
-                <Save size={24}/> 설정 저장하기
+                <Save size={24}/> 전체 설정 저장하기
               </button>
 
             </div>
@@ -399,7 +464,7 @@ export default function App() {
       </main>
       
       <footer className="py-8 text-center no-print mt-auto">
-        <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.3em]">Smart Review System v3.0</p>
+        <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.3em]">Smart Review System v3.1</p>
       </footer>
     </div>
   );
