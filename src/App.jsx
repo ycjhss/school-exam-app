@@ -66,7 +66,8 @@ const SignaturePad = ({ onSave, resetTrigger }) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    ctx.lineWidth = 3;
+    // 💡 서명 선 굵기를 3에서 4로 증가시켜 더 진하게 보이도록 설정
+    ctx.lineWidth = 4;
     ctx.lineCap = 'round';
     ctx.strokeStyle = '#000';
     const rect = canvas.parentElement.getBoundingClientRect();
@@ -141,12 +142,12 @@ export default function App() {
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [viewMode, setViewMode] = useState('teacher'); 
   
-  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
 
   const [selectedSubmission, setSelectedSubmission] = useState(null);
-  const [viewingExamKey, setViewingExamKey] = useState(''); // 💡 과거 기록 조회를 위한 상태 추가
+  const [viewingExamKey, setViewingExamKey] = useState(''); 
 
   const defaultGlobalSettings = {
     year: '2026', semester: '1', examName: '1차 정기시험', documentDate: '2026. 4. 28.',
@@ -166,7 +167,7 @@ export default function App() {
   const [resetSigCounter, setResetSigCounter] = useState(0);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [deleteStep, setDeleteStep] = useState(0); // 교사 서명 삭제 확인 스텝
+  const [deleteStep, setDeleteStep] = useState(0); 
   
   const [adminData, setAdminData] = useState(defaultGlobalSettings);
   const [newSubject, setNewSubject] = useState('');
@@ -207,7 +208,7 @@ export default function App() {
           if (!isDataLoaded) {
             setAdminData(prev => ({ ...prev, ...data }));
             setIsDataLoaded(true);
-            setViewingExamKey(`${data.year}|${data.semester}|${data.examName}`); // 현황판 초기값을 현재 설정으로 세팅
+            setViewingExamKey(`${data.year}|${data.semester}|${data.examName}`); 
           }
         } else {
           setIsDataLoaded(true);
@@ -236,12 +237,12 @@ export default function App() {
     return () => { unsubSigs(); unsubPrints(); };
   }, [user]);
 
-  const handleUnlock = (e) => {
+  // 💡 관리자 모드 암호 확인 로직
+  const handleUnlockAdmin = (e) => {
     e.preventDefault();
-    // 💡 과거 데이터에 비밀번호가 없었을 경우를 대비해 기본값 '1234'로 안전하게 비교합니다.
     const currentPassword = globalSettings.adminPassword || '1234';
     if (pinInput === currentPassword) {
-      setIsUnlocked(true);
+      setIsAdminUnlocked(true);
       setPinError(false);
       setPinInput('');
     } else {
@@ -255,7 +256,6 @@ export default function App() {
     if (!signatureData || !user) return;
     setIsSaving(true);
     try {
-      // 💡 서명 제출 시 현재 설정된 체크리스트 스냅샷을 함께 영구 보존합니다.
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'individualSignatures'), {
         year: String(globalSettings.year), 
         semester: String(globalSettings.semester), 
@@ -263,7 +263,7 @@ export default function App() {
         subject: selectedSubject, 
         teacherName: selectedTeacher, 
         signatureData,
-        checklistSnapshot: globalSettings.checklist || defaultChecklistData, // 스냅샷 백업
+        checklistSnapshot: globalSettings.checklist || defaultChecklistData, 
         createdAt: serverTimestamp(), 
         uid: user.uid
       });
@@ -317,18 +317,15 @@ export default function App() {
     setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000);
   };
 
-  // 💡 과거 기록 조회를 위한 파생 데이터 처리
   const allExamKeys = new Set(allSignatures.map(s => `${s.year}|${s.semester}|${s.examName}`));
   allExamKeys.add(`${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`);
-  const examOptions = Array.from(allExamKeys).sort((a,b) => b.localeCompare(a)); // 최신순 정렬
+  const examOptions = Array.from(allExamKeys).sort((a,b) => b.localeCompare(a)); 
 
   const [vYear, vSem, vExam] = (viewingExamKey || `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`).split('|');
   const isViewingCurrent = viewingExamKey === `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`;
   
-  // 조회 중인 시험의 서명 목록 필터링
   const viewingSignatures = allSignatures.filter(s => s.year === vYear && s.semester === vSem && s.examName === vExam);
   
-  // 현황판에 표시할 과목과 교사 명단 설정 (과거 기록이면 제출된 내역 기반으로 병합)
   let subjectsToDisplay = Array.isArray(globalSettings.subjects) ? [...globalSettings.subjects] : [];
   if (!isViewingCurrent) {
     const pastSubjects = [...new Set(viewingSignatures.map(s => s.subject))];
@@ -374,7 +371,6 @@ export default function App() {
     }
   };
 
-  // 교사용 뷰 전용 필터링
   const currentExamSignatures = allSignatures.filter(s => 
     s.year === String(globalSettings.year) && s.semester === String(globalSettings.semester) && s.examName === String(globalSettings.examName)
   );
@@ -385,7 +381,6 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-100 selection:bg-blue-100 font-sans">
       
-      {/* 💡 완벽한 표(Table) 형태로 디자인된 출력용 팝업 (스냅샷 백업 기능 포함) */}
       {selectedSubmission && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 md:p-8 print:static print:block print:bg-white print:p-0 animate-fade-in overflow-y-auto" onClick={() => setSelectedSubmission(null)}>
           <div className="bg-white p-10 md:p-14 rounded-none md:rounded-[2rem] max-w-4xl w-full shadow-2xl print:shadow-none print:max-w-none print:w-full print:p-0 my-auto" onClick={e => e.stopPropagation()}>
@@ -404,7 +399,6 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {/* 서명 당시 보존된 스냅샷 체크리스트를 렌더링합니다. (과거 서류 변형 방지) */}
                   {(selectedSubmission.checklistSnapshot || defaultChecklistData).map(item => (
                     <tr key={item.id}>
                       {item.type === 'category' ? (
@@ -432,7 +426,7 @@ export default function App() {
                   <span className="mr-8">확인 직위: 교사</span>
                   <span className="mr-2">성명: {selectedSubmission.teacherName}</span>
                   <div className="relative inline-flex items-center justify-center w-28 h-12 ml-2">
-                    <span className="z-0 text-gray-800">(서명/인)</span>
+                    <span className="z-0 text-gray-400 font-normal">(서명/인)</span>
                     <img 
                       src={selectedSubmission.signatureData} 
                       alt="서명" 
@@ -445,7 +439,6 @@ export default function App() {
             </div>
 
             <div className="flex gap-4 mt-16 pt-8 border-t border-gray-200 print:hidden">
-              {/* PDF 백업을 유도하는 명확한 문구 사용 */}
               <button onClick={() => window.print()} className="flex-1 py-4 bg-blue-600 text-white font-black rounded-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-2 text-lg shadow-lg active:scale-95">
                 <Printer size={22}/> 인쇄 및 PDF로 백업 저장
               </button>
@@ -474,21 +467,6 @@ export default function App() {
 
         <main className="flex-1 flex flex-col items-center justify-start p-4 md:p-8 animate-fade-in relative z-0 print:p-0">
           
-          {(viewMode === 'status' || viewMode === 'admin') && !isUnlocked && (
-            <div className="w-full max-w-sm bg-white rounded-[2rem] shadow-xl p-8 mt-12 animate-fade-in text-center border border-gray-100 print:hidden">
-              <div className="bg-blue-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Lock className="text-blue-500" size={28}/>
-              </div>
-              <h2 className="text-xl font-black text-gray-800 mb-2">관리자 암호 확인</h2>
-              <p className="text-sm text-gray-500 mb-6 font-medium">초기 비밀번호는 <strong className="text-blue-600">1234</strong> 입니다.</p>
-              <form onSubmit={handleUnlock}>
-                <input type="password" value={pinInput} onChange={(e) => setPinInput(e.target.value)} placeholder="비밀번호 입력" className={`w-full p-4 bg-gray-50 border-2 rounded-xl text-center text-xl tracking-[0.5em] font-black outline-none transition-all ${pinError ? 'border-red-400 bg-red-50 text-red-600' : 'border-gray-200 focus:border-blue-500'}`} autoFocus />
-                {pinError && <p className="text-xs font-bold text-red-500 mt-2">비밀번호가 일치하지 않습니다.</p>}
-                <button type="submit" className="w-full py-4 mt-6 bg-gray-900 text-white rounded-xl font-black shadow-md hover:bg-black transition-all">확인</button>
-              </form>
-            </div>
-          )}
-
           {/* 1. 교사 서명 화면 */}
           {viewMode === 'teacher' && (
             <div className="w-full max-w-md bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] overflow-hidden border border-white relative mt-4">
@@ -549,14 +527,12 @@ export default function App() {
                         <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1">Teacher</label>
                         <select value={selectedTeacher} onChange={e=>setSelectedTeacher(e.target.value)} className="w-full p-4 bg-blue-50/50 border-2 border-blue-100 rounded-2xl text-base font-bold text-blue-800 focus:border-blue-500 focus:bg-white transition-all appearance-none outline-none shadow-sm" required>
                           <option value="">성함을 선택하세요</option>
-                          {/* 💡 재서명을 위해 이제 제출한 선생님도 명단에 보입니다. */}
                           {safeTeachers.map(t=><option key={t} value={t}>{t}</option>)}
                         </select>
                         <div className="absolute right-4 bottom-4 pointer-events-none opacity-30"><Users size={18}/></div>
                       </div>
                     )}
 
-                    {/* 💡 서명을 이미 한 교사일 경우, 재서명(삭제) 옵션을 띄웁니다. */}
                     {selectedTeacher && existingSigForSelectedTeacher ? (
                       <div className="animate-fade-in p-5 bg-emerald-50 border-2 border-emerald-200 rounded-2xl text-center shadow-sm">
                         <CheckCircle className="mx-auto text-emerald-500 mb-2" size={36}/>
@@ -594,8 +570,8 @@ export default function App() {
             </div>
           )}
 
-          {/* 2. 제출 현황 및 과거 기록 조회 화면 */}
-          {viewMode === 'status' && isUnlocked && (
+          {/* 2. 제출 현황 및 과거 기록 조회 화면 (비밀번호 없음) */}
+          {viewMode === 'status' && (
             <div className="w-full max-w-4xl bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-8 md:p-10 animate-fade-in mt-4 print:shadow-none print:p-0 print:mt-0">
               
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 border-b border-gray-100 pb-6 print:border-b-2 print:border-gray-800">
@@ -608,7 +584,6 @@ export default function App() {
                 </div>
                 
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 print:hidden">
-                  {/* 💡 과거 기록 영구 조회를 위한 드롭다운 추가 */}
                   <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 p-1 rounded-xl">
                     <History size={16} className="text-gray-400 ml-2"/>
                     <select 
@@ -634,7 +609,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 현재 조회 중인 시험 정보 배너 */}
               <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0">
                 {vYear}년 {vSem}학기 {vExam}
               </div>
@@ -718,9 +692,24 @@ export default function App() {
               )}
             </div>
           )}
+
+          {/* 3. 관리자 설정 화면 (비밀번호 확인 필요) */}
+          {viewMode === 'admin' && !isAdminUnlocked && (
+            <div className="w-full max-w-sm bg-white rounded-[2rem] shadow-xl p-8 mt-12 animate-fade-in text-center border border-gray-100 print:hidden">
+              <div className="bg-blue-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Lock className="text-blue-500" size={28}/>
+              </div>
+              <h2 className="text-xl font-black text-gray-800 mb-2">관리자 암호 확인</h2>
+              <p className="text-sm text-gray-500 mb-6 font-medium">초기 비밀번호는 <strong className="text-blue-600">1234</strong> 입니다.</p>
+              <form onSubmit={handleUnlockAdmin}>
+                <input type="password" value={pinInput} onChange={(e) => setPinInput(e.target.value)} placeholder="비밀번호 입력" className={`w-full p-4 bg-gray-50 border-2 rounded-xl text-center text-xl tracking-[0.5em] font-black outline-none transition-all ${pinError ? 'border-red-400 bg-red-50 text-red-600' : 'border-gray-200 focus:border-blue-500'}`} autoFocus />
+                {pinError && <p className="text-xs font-bold text-red-500 mt-2">비밀번호가 일치하지 않습니다.</p>}
+                <button type="submit" className="w-full py-4 mt-6 bg-gray-900 text-white rounded-xl font-black shadow-md hover:bg-black transition-all">확인</button>
+              </form>
+            </div>
+          )}
           
-          {/* 3. 관리자 설정 화면 */}
-          {viewMode === 'admin' && isUnlocked && (
+          {viewMode === 'admin' && isAdminUnlocked && (
             <div className="w-full max-w-2xl bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-8 md:p-10 animate-fade-in mt-4 print:hidden">
               <div className="flex justify-between items-start mb-8 border-b border-gray-100 pb-6">
                 <div className="flex items-center gap-3">
@@ -730,7 +719,7 @@ export default function App() {
                     <p className="text-gray-500 text-sm font-medium">학교의 시험 정보와 과목/교사를 영구 보관합니다.</p>
                   </div>
                 </div>
-                <button onClick={() => setIsUnlocked(false)} className="text-xs text-gray-400 flex items-center gap-1 font-bold hover:text-gray-600"><Lock size={12}/> 잠그기</button>
+                <button onClick={() => setIsAdminUnlocked(false)} className="text-xs text-gray-400 flex items-center gap-1 font-bold hover:text-gray-600"><Lock size={12}/> 잠그기</button>
               </div>
 
               {adminMessage.text && (
