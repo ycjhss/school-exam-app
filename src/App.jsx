@@ -81,7 +81,6 @@ const getDisplayDate = (sig) => {
   return '';
 };
 
-// undefined 문구를 예쁘게 처리하는 도우미 함수
 const formatExamOption = (opt) => {
   const [y, s, e] = opt.split('|');
   const displayY = y === 'undefined' ? '?' : y;
@@ -194,7 +193,7 @@ export default function App() {
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
 
-  const [selectedSubmission, setSelectedSubmission] = useState(null);
+  const [selectedSubmission, setSelectedSubmission] = useState(null); 
   const [viewingExamKey, setViewingExamKey] = useState(''); 
 
   const defaultGlobalSettings = {
@@ -347,7 +346,6 @@ export default function App() {
     }
   };
 
-  // 💡 undefined 불량 데이터를 완벽하게 찾아 삭제하도록 String() 변환 비교 적용
   const executeDeleteExamRecords = async (examKey) => {
     const [dYear, dSem, dExam] = examKey.split('|');
     try {
@@ -396,7 +394,6 @@ export default function App() {
   const [vYear, vSem, vExam] = (viewingExamKey || `${globalSettings.year || '2026'}|${globalSettings.semester || '1'}|${globalSettings.examName || '1차 정기시험'}`).split('|');
   const isViewingCurrent = viewingExamKey === `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`;
   
-  // 💡 조회 필터에도 String() 변환을 적용하여 구버전 기록도 볼 수 있게 함
   const viewingSignatures = allSignatures.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
   
   let subjectsToDisplay = Array.isArray(globalSettings.subjects) ? [...globalSettings.subjects] : [];
@@ -493,74 +490,84 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-100 selection:bg-blue-100 font-sans">
       
-      {/* 💡 서명 및 공문서 확인용 팝업 */}
-      {selectedSubmission && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 md:p-8 print:static print:block print:bg-white print:p-0 animate-fade-in overflow-y-auto" onClick={() => setSelectedSubmission(null)}>
-          <div className="bg-white p-10 md:p-14 rounded-none md:rounded-[2rem] max-w-4xl w-full shadow-2xl print:shadow-none print:max-w-none print:w-full print:p-0 my-auto" onClick={e => e.stopPropagation()}>
-            
-            <div className="print:text-black">
-              <h2 className="text-3xl font-black text-center mb-8 tracking-[0.2em]">지필평가 출제 검토 확인서</h2>
-              <p className="text-lg font-bold leading-relaxed mb-4 text-justify">
-                본인은 {selectedSubmission.year === 'undefined' ? '?' : selectedSubmission.year}년 {selectedSubmission.semester === 'undefined' ? '?' : selectedSubmission.semester}학기 {selectedSubmission.examName === 'undefined' ? '' : selectedSubmission.examName} {selectedSubmission.subject}과 시험문제를 출제함에 있어 아래 표와 같은 내용을 검토하였음을 확인합니다.
-              </p>
+      {/* 💡 서명 및 공문서 통합/개별 확인용 팝업 */}
+      {selectedSubmission && selectedSubmission.length > 0 && (() => {
+        const baseSub = selectedSubmission[0]; 
+        
+        return (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 md:p-8 print:static print:block print:bg-white print:p-0 animate-fade-in overflow-y-auto" onClick={() => setSelectedSubmission(null)}>
+            <div className="bg-white p-10 md:p-14 rounded-none md:rounded-[2rem] max-w-4xl w-full shadow-2xl print:shadow-none print:max-w-none print:w-full print:p-0 my-auto" onClick={e => e.stopPropagation()}>
+              
+              <div className="print:text-black">
+                <h2 className="text-3xl font-black text-center mb-8 tracking-[0.2em]">지필평가 출제 검토 확인서</h2>
+                <p className="text-lg font-bold leading-relaxed mb-4 text-justify">
+                  본인은 {baseSub.year === 'undefined' ? '?' : baseSub.year}년 {baseSub.semester === 'undefined' ? '?' : baseSub.semester}학기 {baseSub.examName === 'undefined' ? '' : baseSub.examName} {baseSub.subject}과 시험문제를 출제함에 있어 아래 표와 같은 내용을 검토하였음을 확인합니다.
+                </p>
 
-              <table className="w-full border-collapse border-2 border-black mb-10 text-[15px] print:text-[14px]">
-                <thead>
-                  <tr>
-                    <th className="border-2 border-black p-3 bg-gray-100 font-black text-center" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>검토 사항</th>
-                    <th className="border-2 border-black p-3 bg-gray-100 font-black text-center w-28 whitespace-nowrap" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>확인여부<br/>(O, X)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(selectedSubmission.checklistSnapshot || defaultChecklistData).map(item => (
-                    <tr key={item.id}>
-                      {item.type === 'category' ? (
-                        <>
-                          <td className="border border-black px-4 py-3 font-bold bg-gray-50 print:bg-gray-50" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>{item.text}</td>
-                          <td className="border border-black px-4 py-3 bg-gray-50 print:bg-gray-50" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}></td>
-                        </>
-                      ) : (
-                        <>
-                          <td className={`border border-black px-4 py-2 leading-snug ${item.type === 'item2' ? 'pl-8' : 'pl-4'}`}>{item.text}</td>
-                          <td className="border border-black p-2 text-center font-black text-xl">{item.status}</td>
-                        </>
-                      )}
+                <table className="w-full border-collapse border-2 border-black mb-10 text-[15px] print:text-[14px]">
+                  <thead>
+                    <tr>
+                      <th className="border-2 border-black p-3 bg-gray-100 font-black text-center" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>검토 사항</th>
+                      <th className="border-2 border-black p-3 bg-gray-100 font-black text-center w-28 whitespace-nowrap" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>확인여부<br/>(O, X)</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {(baseSub.checklistSnapshot || defaultChecklistData).map(item => (
+                      <tr key={item.id}>
+                        {item.type === 'category' ? (
+                          <>
+                            <td className="border border-black px-4 py-3 font-bold bg-gray-50 print:bg-gray-50" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>{item.text}</td>
+                            <td className="border border-black px-4 py-3 bg-gray-50 print:bg-gray-50" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}></td>
+                          </>
+                        ) : (
+                          <>
+                            <td className={`border border-black px-4 py-2 leading-snug ${item.type === 'item2' ? 'pl-8' : 'pl-4'}`}>{item.text}</td>
+                            <td className="border border-black p-2 text-center font-black text-xl">{item.status}</td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
 
-              <div className="text-center mt-12 print:mt-16">
-                <p className="text-lg font-bold mb-6">위 항목을 모두 확인하고 이상 없음을 확인합니다.</p>
-                <p className="text-xl font-bold tracking-widest mb-10">{globalSettings.documentDate}</p>
-                
-                <div className="flex justify-end items-center text-xl font-bold pr-4">
-                  <span className="mr-8">확인 직위: 교사</span>
-                  <span className="mr-2">성명: {selectedSubmission.teacherName}</span>
-                  <div className="relative inline-flex items-center justify-center w-28 h-12 ml-2">
-                    <span className="z-0 text-gray-400 font-normal">(서명/인)</span>
-                    <img 
-                      src={selectedSubmission.signatureData} 
-                      alt="서명" 
-                      className="absolute z-10 h-16 w-[140%] max-w-none object-contain mix-blend-multiply drop-shadow-sm pointer-events-none" 
-                      style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }} 
-                    />
+                <div className="text-center mt-12 print:mt-16">
+                  <p className="text-lg font-bold mb-6">위 항목을 모두 확인하고 이상 없음을 확인합니다.</p>
+                  <p className="text-xl font-bold tracking-widest mb-10">{globalSettings.documentDate}</p>
+                  
+                  {/* 💡 서명 영역 세로 정렬 및 위치 최적화 */}
+                  <div className="flex flex-col items-end text-xl font-bold pr-4 gap-y-6 mt-4">
+                    {selectedSubmission.map((sub, idx) => (
+                      <div key={idx} className="flex items-center">
+                        <span className={`mr-8 ${idx === 0 ? '' : 'invisible'}`}>확인 직위: 교사</span>
+                        <span className="mr-2 w-32 text-right">성명: {sub.teacherName}</span>
+                        <div className="relative inline-flex items-center justify-center w-28 h-12 ml-2">
+                          <span className="z-0 text-gray-400 font-normal">(서명/인)</span>
+                          <img 
+                            src={sub.signatureData} 
+                            alt="서명" 
+                            className="absolute z-10 h-16 w-[140%] max-w-none object-contain mix-blend-multiply drop-shadow-sm pointer-events-none" 
+                            style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }} 
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </div>
+
                 </div>
               </div>
-            </div>
 
-            <div className="flex gap-4 mt-16 pt-8 border-t border-gray-200 print:hidden">
-              <button onClick={() => window.print()} className="flex-1 py-4 bg-blue-600 text-white font-black rounded-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-2 text-lg shadow-lg active:scale-95">
-                <Printer size={22}/> 인쇄 및 PDF로 백업 저장
-              </button>
-              <button onClick={() => setSelectedSubmission(null)} className="flex-1 py-4 bg-gray-900 text-white font-black rounded-xl hover:bg-black transition-all flex items-center justify-center gap-2 text-lg active:scale-95">
-                <X size={22}/> 닫기
-              </button>
+              <div className="flex gap-4 mt-16 pt-8 border-t border-gray-200 print:hidden">
+                <button onClick={() => window.print()} className="flex-1 py-4 bg-blue-600 text-white font-black rounded-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-2 text-lg shadow-lg active:scale-95">
+                  <Printer size={22}/> 인쇄 및 PDF로 백업 저장
+                </button>
+                <button onClick={() => setSelectedSubmission(null)} className="flex-1 py-4 bg-gray-900 text-white font-black rounded-xl hover:bg-black transition-all flex items-center justify-center gap-2 text-lg active:scale-95">
+                  <X size={22}/> 닫기
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 전체 메인 레이아웃 */}
       <div className={`${selectedSubmission ? 'print:hidden' : ''} flex flex-col flex-1`}>
@@ -729,7 +736,7 @@ export default function App() {
                       <Download size={16} /> 엑셀
                     </button>
                     <button onClick={() => window.print()} className="bg-gray-800 text-white px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-black transition-colors shadow-md">
-                      <Printer size={16} /> 인쇄
+                      <Printer size={16} /> 현황판 인쇄
                     </button>
                   </div>
                 </div>
@@ -754,7 +761,14 @@ export default function App() {
                   return (
                     <div key={subject.name} className={`relative p-6 rounded-3xl border-2 transition-all shadow-sm print:break-inside-avoid ${isComplete ? 'bg-emerald-50/50 border-emerald-100 print:border-gray-300 print:bg-white' : 'bg-white border-gray-200 print:border-gray-300'}`}>
                       <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-2 print:border-gray-200">
-                        <h3 className="text-lg font-black text-gray-800">{subject.name}</h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-lg font-black text-gray-800">{subject.name}</h3>
+                          {subjectSignatures.length > 0 && (
+                            <button onClick={() => setSelectedSubmission(subjectSignatures)} className="print:hidden text-[11px] bg-blue-100 text-blue-700 px-2 py-1 rounded-md font-bold hover:bg-blue-200 flex items-center gap-1 transition-colors">
+                               <Printer size={12}/> 통합인쇄
+                            </button>
+                          )}
+                        </div>
                         <div className={`px-3 py-1 rounded-full text-xs font-black ${isComplete ? 'bg-emerald-100 text-emerald-700 print:bg-gray-100 print:text-gray-800' : 'bg-gray-100 text-gray-600'}`}>
                           {submittedCount} / {totalCount} 명
                         </div>
@@ -774,8 +788,8 @@ export default function App() {
                                   {teacher} 교사
                                 </span>
                                 {hasSubmitted ? (
-                                  <button onClick={() => setSelectedSubmission(sigRecord)} className="flex items-center gap-1 text-xs font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100 hover:bg-emerald-100 transition-colors print:border-none print:bg-transparent print:text-gray-800">
-                                    <FileText size={14} className="print:hidden"/> 백업 서류 확인
+                                  <button onClick={() => setSelectedSubmission([sigRecord])} className="flex items-center gap-1 text-[11px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100 hover:bg-emerald-100 transition-colors print:border-none print:bg-transparent print:text-gray-800">
+                                    <FileText size={12} className="print:hidden"/> 개별 확인
                                   </button>
                                 ) : (
                                   <span className="text-xs font-bold text-red-400 print:text-gray-500">미제출</span>
