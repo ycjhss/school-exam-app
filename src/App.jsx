@@ -534,7 +534,7 @@ export default function App() {
                   <p className="text-lg font-bold mb-6">위 항목을 모두 확인하고 이상 없음을 확인합니다.</p>
                   <p className="text-xl font-bold tracking-widest mb-10">{globalSettings.documentDate}</p>
                   
-                  {/* 💡 서명 영역 세로 정렬 및 위치 최적화 */}
+                  {/* 서명 영역 세로 정렬 및 위치 최적화 */}
                   <div className="flex flex-col items-end text-xl font-bold pr-4 gap-y-6 mt-4">
                     {selectedSubmission.map((sub, idx) => (
                       <div key={idx} className="flex items-center">
@@ -764,7 +764,11 @@ export default function App() {
                         <div className="flex items-center gap-2">
                           <h3 className="text-lg font-black text-gray-800">{subject.name}</h3>
                           {subjectSignatures.length > 0 && (
-                            <button onClick={() => setSelectedSubmission(subjectSignatures)} className="print:hidden text-[11px] bg-blue-100 text-blue-700 px-2 py-1 rounded-md font-bold hover:bg-blue-200 flex items-center gap-1 transition-colors">
+                            // 💡 통합 인쇄 시 선생님 이름 가나다순 정렬 적용
+                            <button onClick={() => {
+                              const sortedSigs = [...subjectSignatures].sort((a, b) => a.teacherName.localeCompare(b.teacherName, 'ko-KR'));
+                              setSelectedSubmission(sortedSigs);
+                            }} className="print:hidden text-[11px] bg-blue-100 text-blue-700 px-2 py-1 rounded-md font-bold hover:bg-blue-200 flex items-center gap-1 transition-colors">
                                <Printer size={12}/> 통합인쇄
                             </button>
                           )}
