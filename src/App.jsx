@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Save, CheckCircle, Trash2, Users, Check, AlertCircle, FileText, 
   Edit2, Search, Settings, Plus, X, BarChart3, Clock, List,
-  Printer, Download, Lock, Unlock, Image as ImageIcon, History
+  Printer, Download, Lock, Unlock, Image as ImageIcon, History,
+  CalendarDays, Edit
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
@@ -87,6 +88,11 @@ const formatExamOption = (opt) => {
   const displayS = s === 'undefined' ? '?' : s;
   const displayE = e === 'undefined' ? '(구버전 기록)' : e;
   return `${displayY}년 ${displayS}학기 ${displayE}`;
+};
+
+// 💡 시험 범위 고유 ID 생성 함수 (연도, 학기, 고사명, 일자, 학년, 교시, 과목 조합)
+const getScopeId = (vYear, vSem, vExam, item) => {
+  return `${vYear}_${vSem}_${vExam}_${item.date}_${item.grade}_${item.period}_${item.subject}`.replace(/\s/g, '');
 };
 
 const SignaturePad = ({ onSave }) => {
@@ -188,6 +194,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [viewMode, setViewMode] = useState('teacher'); 
+  const [statusTab, setStatusTab] = useState('signature'); // 💡 현황판 내 탭 (signature, scope)
   
   const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
@@ -200,14 +207,16 @@ export default function App() {
     year: '2026', semester: '1', examName: '1차 정기시험', documentDate: '2026. 4. 28.',
     adminPassword: '1234', 
     subjects: [
-      { name: '국어', teachers: ['김국어', '이국어'] },
-      { name: '수학', teachers: ['박수학', '최수학'] }
+      { name: '공통국어1', teachers: ['홍길동', '이순신'] },
+      { name: '한국사1', teachers: ['강감찬'] }
     ],
-    checklist: defaultChecklistData
+    checklist: defaultChecklistData,
+    examSchedule: [] // 💡 시험 시간표 기본틀 보관
   };
 
   const [globalSettings, setGlobalSettings] = useState(defaultGlobalSettings);
   
+  // Teacher Signature State
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedTeacher, setSelectedTeacher] = useState('');
   const [signatureData, setSignatureData] = useState(null);
@@ -216,11 +225,19 @@ export default function App() {
   const [submitError, setSubmitError] = useState('');
   const [deleteStep, setDeleteStep] = useState(0); 
   
+  // Scope Input State
+  const [examScopes, setExamScopes] = useState([]); // 💡 전체 시험 범위 데이터
+  const [selectedScheduleItem, setSelectedScheduleItem] = useState(null);
+  const [scopeInputText, setScopeInputText] = useState('');
+  const [scopeInputTeacher, setScopeInputTeacher] = useState('');
+
+  // Admin State
   const [adminData, setAdminData] = useState(defaultGlobalSettings);
   const [newSubject, setNewSubject] = useState('');
   const [newTeachers, setNewTeachers] = useState({}); 
   const [adminMessage, setAdminMessage] = useState({ type: '', text: '' });
   const [bulkInput, setBulkInput] = useState(''); 
+  const [scheduleBulkInput, setScheduleBulkInput] = useState(''); // 💡 시간표 대량 입력
   const [allSignatures, setAllSignatures] = useState([]); 
   const [printStatuses, setPrintStatuses] = useState([]); 
   const [newChecklistType, setNewChecklistType] = useState('item1');
@@ -272,17 +289,22 @@ export default function App() {
       (snap) => {
         const sigs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setAllSignatures(sigs);
-      },
-      (err) => console.error(err)
+      }
     );
     const unsubPrints = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'printStatuses'), 
       (snap) => {
         const records = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setPrintStatuses(records);
-      },
-      (err) => console.error(err)
+      }
     );
-    return () => { unsubSigs(); unsubPrints(); };
+    // 💡 시험 범위 데이터 실시간 수신
+    const unsubScopes = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'examScopes'), 
+      (snap) => {
+        const scopes = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setExamScopes(scopes);
+      }
+    );
+    return () => { unsubSigs(); unsubPrints(); unsubScopes(); };
   }, [user]);
 
   const handleUnlockAdmin = (e) => {
@@ -334,6 +356,36 @@ export default function App() {
     }
   };
 
+  // 💡 시험 범위 저장 (선생님 입력)
+  const handleScopeSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedScheduleItem || !scopeInputTeacher) {
+      alert("성함을 입력해주세요."); return;
+    }
+    setIsSaving(true);
+    try {
+      const vYear = String(globalSettings.year);
+      const vSem = String(globalSettings.semester);
+      const vExam = String(globalSettings.examName);
+      const docId = getScopeId(vYear, vSem, vExam, selectedScheduleItem);
+      
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examScopes', docId), {
+        year: vYear, semester: vSem, examName: vExam,
+        date: selectedScheduleItem.date,
+        grade: selectedScheduleItem.grade,
+        period: selectedScheduleItem.period,
+        subject: selectedScheduleItem.subject,
+        scopeText: scopeInputText,
+        teacherName: scopeInputTeacher,
+        updatedAt: serverTimestamp()
+      });
+      setSelectedScheduleItem(null); setScopeInputText(''); setScopeInputTeacher('');
+    } catch (err) {
+      alert("저장 중 오류가 발생했습니다.");
+    }
+    setIsSaving(false);
+  };
+
   const handleAdminSave = async () => {
     try {
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), adminData);
@@ -357,6 +409,12 @@ export default function App() {
       for (const p of printsToDelete) {
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'printStatuses', p.id));
       }
+      // 시험 범위도 삭제
+      const scopesToDelete = examScopes.filter(s => String(s.year) === dYear && String(s.semester) === dSem && String(s.examName) === dExam);
+      for (const sc of scopesToDelete) {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examScopes', sc.id));
+      }
+
       setDeleteExamKey(null);
       setAdminMessage({ type: 'success', text: `과거 기록이 영구 삭제되었습니다.` });
       setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000);
@@ -387,7 +445,33 @@ export default function App() {
     setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000);
   };
 
-  const allExamKeys = new Set(allSignatures.map(s => `${s.year}|${s.semester}|${s.examName}`));
+  // 💡 시간표 대량 붙여넣기 로직
+  const handleScheduleBulkPaste = () => {
+    if(!scheduleBulkInput.trim()) return;
+    const lines = scheduleBulkInput.split('\n');
+    const newSchedule = lines.map((line, i) => {
+      const parts = line.split('\t').map(p => p.trim()).filter(Boolean);
+      if (parts.length >= 4) {
+        return { id: Date.now() + i, date: parts[0], grade: parts[1], period: parts[2], subject: parts[3] };
+      }
+      return null;
+    }).filter(Boolean);
+    
+    setAdminData(prev => ({ 
+      ...prev, 
+      examSchedule: [...(prev.examSchedule || []), ...newSchedule] 
+    }));
+    setScheduleBulkInput('');
+    setAdminMessage({ type: 'success', text: '시간표 명단이 추가되었습니다. 꼭 [전체 설정 저장하기]를 눌러주세요.' });
+    setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000);
+  };
+
+  const removeScheduleItem = (id) => {
+    setAdminData(prev => ({ ...prev, examSchedule: (prev.examSchedule || []).filter(item => item.id !== id) }));
+  };
+
+  // 공통 변수들
+  const allExamKeys = new Set([...allSignatures, ...examScopes].map(s => `${s.year}|${s.semester}|${s.examName}`));
   allExamKeys.add(`${globalSettings.year || '2026'}|${globalSettings.semester || '1'}|${globalSettings.examName || '1차 정기시험'}`);
   const examOptions = Array.from(allExamKeys).sort((a,b) => b.localeCompare(a)); 
 
@@ -395,6 +479,7 @@ export default function App() {
   const isViewingCurrent = viewingExamKey === `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`;
   
   const viewingSignatures = allSignatures.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
+  const viewingScopes = examScopes.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
   
   let subjectsToDisplay = Array.isArray(globalSettings.subjects) ? [...globalSettings.subjects] : [];
   if (!isViewingCurrent) {
@@ -408,6 +493,8 @@ export default function App() {
     });
     subjectsToDisplay = historicalSubjects;
   }
+
+  const scheduleToDisplay = globalSettings.examSchedule || [];
 
   const handleExportCSV = () => {
     let csv = "\uFEFF과목명,교사명,제출상태,서명(클라우드기록)시간\n";
@@ -446,27 +533,33 @@ export default function App() {
     setAdminData(prev => ({ ...prev, subjects: [...(prev.subjects || []), { name: newSubject.trim(), teachers: [] }] }));
     setNewSubject('');
   };
+
   const removeSubject = (subjectName) => {
     setAdminData(prev => ({ ...prev, subjects: (prev.subjects || []).filter(s => s.name !== subjectName) }));
   };
+
   const addTeacherToSubject = (subjectName) => {
     const teacherName = newTeachers[subjectName]?.trim();
     if(!teacherName) return;
     setAdminData(prev => ({ ...prev, subjects: (prev.subjects || []).map(s => s.name === subjectName ? { ...s, teachers: [...(s.teachers || []), teacherName] } : s) }));
     setNewTeachers(prev => ({ ...prev, [subjectName]: '' }));
   };
+
   const removeTeacherFromSubject = (subjectName, teacherName) => {
     setAdminData(prev => ({ ...prev, subjects: (prev.subjects || []).map(s => s.name === subjectName ? { ...s, teachers: (s.teachers || []).filter(t => t !== teacherName) } : s) }));
   };
+
   const addChecklistItem = () => {
     if(!newChecklistText.trim()) return;
     const newItem = { id: Date.now(), type: newChecklistType, text: newChecklistText.trim(), status: 'O' };
     setAdminData(prev => ({ ...prev, checklist: [...(prev.checklist || defaultChecklistData), newItem] }));
     setNewChecklistText('');
   };
+
   const removeChecklistItem = (id) => {
     setAdminData(prev => ({ ...prev, checklist: (prev.checklist || defaultChecklistData).filter(item => item.id !== id) }));
   };
+
   const updateChecklistStatus = (id, newStatus) => {
     setAdminData(prev => ({
       ...prev,
@@ -474,6 +567,86 @@ export default function App() {
         item.id === id ? { ...item, status: newStatus } : item
       )
     }));
+  };
+
+  // 💡 시험 범위 테이블 렌더링 함수 (입력용 & 인쇄용 공용)
+  const renderScheduleTable = (isPrintView = false) => {
+    if (scheduleToDisplay.length === 0) {
+      return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">등록된 시험 시간표가 없습니다. 관리자 설정에서 엑셀을 붙여넣어주세요.</div>;
+    }
+
+    const dateSpans = {};
+    const gradeSpans = {};
+    
+    scheduleToDisplay.forEach(item => {
+      dateSpans[item.date] = (dateSpans[item.date] || 0) + 1;
+      const gradeKey = `${item.date}_${item.grade}`;
+      gradeSpans[gradeKey] = (gradeSpans[gradeKey] || 0) + 1;
+    });
+
+    const renderedDates = new Set();
+    const renderedGrades = new Set();
+
+    return (
+      <div className={`w-full overflow-x-auto ${isPrintView ? 'print:overflow-visible' : 'bg-white rounded-2xl shadow-sm border border-gray-200'}`}>
+        <table className={`w-full border-collapse border-2 border-black text-center text-[15px] ${isPrintView ? 'print:text-[13px] print:w-full' : ''}`}>
+          <thead>
+            <tr>
+              <th className="border-2 border-black p-2 bg-gray-100 font-black w-24">일자</th>
+              <th className="border-2 border-black p-2 bg-gray-100 font-black w-16">학년</th>
+              <th className="border-2 border-black p-2 bg-gray-100 font-black w-16">교시</th>
+              <th className="border-2 border-black p-2 bg-gray-100 font-black w-40">과목</th>
+              <th className="border-2 border-black p-2 bg-gray-100 font-black">시험 범위</th>
+              {!isPrintView && <th className="border-2 border-black p-2 bg-gray-100 font-black w-24">관리</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {scheduleToDisplay.map((item, idx) => {
+              const scopeId = getScopeId(vYear, vSem, vExam, item);
+              const scopeDoc = viewingScopes.find(s => s.id === scopeId);
+              const gradeKey = `${item.date}_${item.grade}`;
+
+              const showDate = !renderedDates.has(item.date);
+              if (showDate) renderedDates.add(item.date);
+
+              const showGrade = !renderedGrades.has(gradeKey);
+              if (showGrade) renderedGrades.add(gradeKey);
+
+              return (
+                <tr key={item.id || idx}>
+                  {showDate && <td rowSpan={dateSpans[item.date]} className="border border-black p-2 align-middle whitespace-pre-wrap">{item.date}</td>}
+                  {showGrade && <td rowSpan={gradeSpans[gradeKey]} className="border border-black p-2 align-middle font-bold">{item.grade}</td>}
+                  <td className="border border-black p-2">{item.period}</td>
+                  <td className="border border-black p-2 font-bold">{item.subject}</td>
+                  <td className="border border-black p-3 text-left whitespace-pre-wrap min-w-[200px] leading-relaxed">
+                    {scopeDoc?.scopeText || (isPrintView ? '' : <span className="text-gray-300 italic">미입력</span>)}
+                    {!isPrintView && scopeDoc && (
+                      <div className="text-[10px] text-gray-400 mt-2 font-medium text-right">
+                        마지막 수정: {scopeDoc.teacherName} ({getDisplayDate(scopeDoc)})
+                      </div>
+                    )}
+                  </td>
+                  {!isPrintView && (
+                    <td className="border border-black p-2 align-middle">
+                      <button 
+                        onClick={() => {
+                          setSelectedScheduleItem(item);
+                          setScopeInputText(scopeDoc?.scopeText || '');
+                          setScopeInputTeacher(''); 
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all w-full flex items-center justify-center gap-1 ${scopeDoc ? 'bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100' : 'bg-gray-800 text-white hover:bg-black'}`}
+                      >
+                        <Edit size={12}/> {scopeDoc ? '수정' : '입력'}
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
   };
 
   const safeSubjects = Array.isArray(globalSettings.subjects) ? globalSettings.subjects : [];
@@ -569,19 +742,74 @@ export default function App() {
         );
       })()}
 
-      {/* 전체 메인 레이아웃 */}
-      <div className={`${selectedSubmission ? 'print:hidden' : ''} flex flex-col flex-1`}>
-        <header className="bg-white/90 backdrop-blur-md sticky top-0 z-10 border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm print:hidden">
-          <div className="flex items-center gap-3">
-            <div className="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-200 hidden sm:block">
-              <FileText className="text-white" size={20}/>
+      {/* 시험 범위 입력 모달 */}
+      {selectedScheduleItem && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-fade-in" onClick={() => setSelectedScheduleItem(null)}>
+          <div className="bg-white p-8 rounded-[2rem] max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6 border-b border-gray-100 pb-4">
+              <h2 className="text-xl font-black text-gray-800 flex items-center gap-2">
+                <Edit2 className="text-blue-500" size={24}/> 시험 범위 입력
+              </h2>
+              <button onClick={() => setSelectedScheduleItem(null)} className="text-gray-400 hover:text-red-500"><X size={24}/></button>
             </div>
-            <h1 className="text-xl font-black text-gray-800 tracking-tight">스마트 출제 검토</h1>
+            
+            <div className="mb-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
+              <p className="text-sm font-bold text-blue-900">{selectedScheduleItem.date} {selectedScheduleItem.grade}학년 {selectedScheduleItem.period}교시</p>
+              <p className="text-lg font-black text-blue-700">{selectedScheduleItem.subject}</p>
+            </div>
+
+            <form onSubmit={handleScopeSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-black text-gray-500 mb-2">시험 범위 내용</label>
+                <textarea 
+                  value={scopeInputText} 
+                  onChange={e => setScopeInputText(e.target.value)} 
+                  className="w-full h-32 p-3 bg-gray-50 border-2 border-gray-200 rounded-xl text-sm outline-none focus:border-blue-500 resize-none"
+                  placeholder="예: 교과서 p.12 ~ p.56, 학습지 1~3회차"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-black text-gray-500 mb-2">작성자(수정자) 성함</label>
+                <input 
+                  type="text" 
+                  value={scopeInputTeacher} 
+                  onChange={e => setScopeInputTeacher(e.target.value)} 
+                  className="w-full p-3 bg-gray-50 border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-blue-500"
+                  placeholder="홍길동"
+                  required
+                />
+              </div>
+              <button type="submit" disabled={isSaving} className="w-full py-4 mt-2 bg-gray-900 text-white rounded-xl font-black shadow-md hover:bg-black transition-all active:scale-95 flex items-center justify-center gap-2">
+                {isSaving ? '저장 중...' : <><Save size={18}/> 시험 범위 저장하기</>}
+              </button>
+            </form>
           </div>
-          <div className="flex bg-gray-200/50 p-1.5 rounded-2xl border border-gray-200 overflow-x-auto custom-scrollbar">
-            <button onClick={() => setViewMode('teacher')} className={`px-4 py-2 rounded-xl text-xs font-black transition-all duration-200 whitespace-nowrap ${viewMode==='teacher'?'bg-white text-blue-600 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}>교사 서명</button>
-            <button onClick={() => setViewMode('status')} className={`px-4 py-2 rounded-xl text-xs font-black transition-all duration-200 whitespace-nowrap ${viewMode==='status'?'bg-white text-emerald-600 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}>제출 현황</button>
-            <button onClick={() => setViewMode('admin')} className={`px-4 py-2 rounded-xl text-xs font-black transition-all duration-200 whitespace-nowrap ${viewMode==='admin'?'bg-white text-purple-600 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}>관리자 설정</button>
+        </div>
+      )}
+
+      {/* 전체 메인 레이아웃 */}
+      <div className={`${selectedSubmission || selectedScheduleItem ? 'print:hidden' : ''} flex flex-col flex-1`}>
+        <header className="bg-white/90 backdrop-blur-md sticky top-0 z-10 border-b border-gray-200 px-3 sm:px-6 py-3 flex justify-between items-center shadow-sm print:hidden">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="bg-blue-600 p-1.5 sm:p-2 rounded-xl shadow-lg shadow-blue-200">
+              <FileText className="text-white w-4 h-4 sm:w-5 sm:h-5"/>
+            </div>
+            <h1 className="text-base sm:text-xl font-black text-gray-800 tracking-tight whitespace-nowrap">스마트 출제 검토</h1>
+          </div>
+          <div className="flex bg-gray-200/50 p-1 rounded-xl sm:rounded-2xl border border-gray-200 overflow-x-auto custom-scrollbar no-scrollbar">
+            <button onClick={() => setViewMode('teacher')} className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all duration-200 whitespace-nowrap flex items-center gap-1 ${viewMode==='teacher'?'bg-white text-blue-600 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}>
+              <Edit2 size={12}/>출제 서명
+            </button>
+            <button onClick={() => setViewMode('scope')} className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all duration-200 whitespace-nowrap flex items-center gap-1 ${viewMode==='scope'?'bg-white text-indigo-600 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}>
+              <CalendarDays size={12}/>시험 범위
+            </button>
+            <button onClick={() => {setViewMode('status'); setStatusTab('signature');}} className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all duration-200 whitespace-nowrap flex items-center gap-1 ${viewMode==='status'?'bg-white text-emerald-600 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}>
+              <BarChart3 size={12}/>제출 현황
+            </button>
+            <button onClick={() => setViewMode('admin')} className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all duration-200 whitespace-nowrap flex items-center gap-1 ${viewMode==='admin'?'bg-white text-purple-600 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}>
+              <Settings size={12}/>관리자
+            </button>
           </div>
         </header>
 
@@ -704,20 +932,40 @@ export default function App() {
             </div>
           )}
 
-          {/* 2. 제출 현황 (비밀번호 없음) */}
+          {/* 2. 시험 범위 입력 화면 (선생님용) */}
+          {viewMode === 'scope' && (
+            <div className="w-full max-w-5xl animate-fade-in mt-4">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 px-2">
+                <div>
+                  <h2 className="text-2xl font-black text-gray-800 flex items-center gap-2"><CalendarDays className="text-indigo-600"/> 시험 범위 입력</h2>
+                  <p className="text-gray-500 text-sm font-medium mt-1">본인이 담당하는 과목의 [입력/수정] 버튼을 눌러 시험 범위를 작성해주세요.</p>
+                </div>
+              </div>
+              {renderScheduleTable(false)}
+            </div>
+          )}
+
+          {/* 3. 제출 현황 (비밀번호 없음) - 서명 현황 / 시험 범위 현황 통합 */}
           {viewMode === 'status' && (
-            <div className="w-full max-w-4xl bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-8 md:p-10 animate-fade-in mt-4 print:shadow-none print:p-0 print:mt-0">
+            <div className="w-full max-w-5xl bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-6 md:p-10 animate-fade-in mt-4 print:shadow-none print:p-0 print:mt-0 print:border-none print:bg-transparent">
               
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 border-b border-gray-100 pb-6 print:border-b-2 print:border-gray-800">
-                <div className="flex items-center gap-3">
-                  <div className="bg-emerald-100 p-3 rounded-2xl print:hidden"><BarChart3 className="text-emerald-600" size={24}/></div>
-                  <div>
-                    <h2 className="text-2xl font-black text-gray-800">과목별 검토 제출 현황</h2>
-                    <p className="text-gray-500 text-sm font-medium">진행 현황을 모니터링하고 문서를 인쇄합니다.</p>
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 border-b border-gray-100 pb-6 print:hidden">
+                <div className="flex flex-col gap-4 w-full md:w-auto">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-emerald-100 p-3 rounded-2xl"><BarChart3 className="text-emerald-600" size={24}/></div>
+                    <div>
+                      <h2 className="text-2xl font-black text-gray-800">문서 출력 및 제출 현황</h2>
+                      <p className="text-gray-500 text-sm font-medium">서명 및 시험 범위 취합 결과를 확인하고 인쇄합니다.</p>
+                    </div>
+                  </div>
+                  {/* 서브 탭 전환 버튼 */}
+                  <div className="flex bg-gray-100 p-1 rounded-xl self-start">
+                    <button onClick={() => setStatusTab('signature')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${statusTab === 'signature' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>출제 검토 서명 현황</button>
+                    <button onClick={() => setStatusTab('scope')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${statusTab === 'scope' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>시험 범위표 출력</button>
                   </div>
                 </div>
                 
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 print:hidden">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 self-end md:self-center">
                   <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 p-1 rounded-xl">
                     <History size={16} className="text-gray-400 ml-2"/>
                     <select 
@@ -732,112 +980,128 @@ export default function App() {
                   </div>
 
                   <div className="flex gap-2">
-                    <button onClick={handleExportCSV} className="bg-blue-50 text-blue-700 px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-blue-100 transition-colors border border-blue-200">
-                      <Download size={16} /> 엑셀
-                    </button>
-                    <button onClick={() => window.print()} className="bg-gray-800 text-white px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-black transition-colors shadow-md">
-                      <Printer size={16} /> 현황판 인쇄
+                    {statusTab === 'signature' && (
+                      <button onClick={handleExportCSV} className="bg-blue-50 text-blue-700 px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-blue-100 transition-colors border border-blue-200">
+                        <Download size={16} /> 엑셀
+                      </button>
+                    )}
+                    <button onClick={() => window.print()} className="bg-gray-800 text-white px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-black transition-colors shadow-md whitespace-nowrap">
+                      <Printer size={16} /> {statusTab === 'scope' ? '범위표 인쇄' : '현황판 인쇄'}
                     </button>
                   </div>
                 </div>
               </div>
 
-              <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0">
-                {formatExamOption(viewingExamKey || `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`)}
-              </div>
+              {/* 💡 서명 현황 탭 내용 */}
+              {statusTab === 'signature' && (
+                <div className="animate-fade-in print:block">
+                  <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4">
+                    [출제 검토 서명 현황] {formatExamOption(viewingExamKey || `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`)}
+                  </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 print:grid-cols-2">
-                {subjectsToDisplay.map(subject => {
-                  const subjectSignatures = viewingSignatures.filter(s => s.subject === subject.name);
-                  const submittedNames = subjectSignatures.map(s => s.teacherName);
-                  const totalCount = (subject.teachers || []).length;
-                  const submittedCount = (subject.teachers || []).filter(t => submittedNames.includes(t)).length;
-                  const isComplete = totalCount > 0 && submittedCount === totalCount;
-                  
-                  const printRecord = printStatuses.find(p => 
-                    p.year === vYear && p.semester === vSem && p.examName === vExam && p.subjectName === subject.name
-                  );
-
-                  return (
-                    <div key={subject.name} className={`relative p-6 rounded-3xl border-2 transition-all shadow-sm print:break-inside-avoid ${isComplete ? 'bg-emerald-50/50 border-emerald-100 print:border-gray-300 print:bg-white' : 'bg-white border-gray-200 print:border-gray-300'}`}>
-                      <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-2 print:border-gray-200">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-lg font-black text-gray-800">{subject.name}</h3>
-                          {subjectSignatures.length > 0 && (
-                            // 💡 통합 인쇄 시 선생님 이름 가나다순 정렬 적용
-                            <button onClick={() => {
-                              const sortedSigs = [...subjectSignatures].sort((a, b) => a.teacherName.localeCompare(b.teacherName, 'ko-KR'));
-                              setSelectedSubmission(sortedSigs);
-                            }} className="print:hidden text-[11px] bg-blue-100 text-blue-700 px-2 py-1 rounded-md font-bold hover:bg-blue-200 flex items-center gap-1 transition-colors">
-                               <Printer size={12}/> 통합인쇄
-                            </button>
-                          )}
-                        </div>
-                        <div className={`px-3 py-1 rounded-full text-xs font-black ${isComplete ? 'bg-emerald-100 text-emerald-700 print:bg-gray-100 print:text-gray-800' : 'bg-gray-100 text-gray-600'}`}>
-                          {submittedCount} / {totalCount} 명
-                        </div>
-                      </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 print:grid-cols-2">
+                    {subjectsToDisplay.map(subject => {
+                      const subjectSignatures = viewingSignatures.filter(s => s.subject === subject.name);
+                      const submittedNames = subjectSignatures.map(s => s.teacherName);
+                      const totalCount = (subject.teachers || []).length;
+                      const submittedCount = (subject.teachers || []).filter(t => submittedNames.includes(t)).length;
+                      const isComplete = totalCount > 0 && submittedCount === totalCount;
                       
-                      <div className="flex flex-col gap-2 mt-4">
-                        {(subject.teachers || []).length === 0 ? (
-                          <span className="text-xs text-gray-400">등록된 교사가 없습니다.</span>
-                        ) : (
-                          (subject.teachers || []).map(teacher => {
-                            const sigRecord = subjectSignatures.find(s => s.teacherName === teacher);
-                            const hasSubmitted = !!sigRecord;
-                            
-                            return (
-                              <div key={teacher} className={`flex items-center justify-between p-2.5 rounded-xl border print:border-none print:p-1 print:border-b ${hasSubmitted ? 'bg-white border-emerald-200 print:bg-white' : 'bg-gray-50 border-gray-200'}`}>
-                                <span className={`text-sm font-bold ${hasSubmitted ? 'text-gray-800' : 'text-gray-400'}`}>
-                                  {teacher} 교사
-                                </span>
-                                {hasSubmitted ? (
-                                  <button onClick={() => setSelectedSubmission([sigRecord])} className="flex items-center gap-1 text-[11px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100 hover:bg-emerald-100 transition-colors print:border-none print:bg-transparent print:text-gray-800">
-                                    <FileText size={12} className="print:hidden"/> 개별 확인
-                                  </button>
-                                ) : (
-                                  <span className="text-xs font-bold text-red-400 print:text-gray-500">미제출</span>
-                                )}
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
+                      const printRecord = printStatuses.find(p => 
+                        p.year === vYear && p.semester === vSem && p.examName === vExam && p.subjectName === subject.name
+                      );
 
-                      {isComplete && (
-                        <div className="mt-5 pt-4 border-t border-emerald-100/60 print:border-t-2 print:border-gray-400 print:mt-4">
-                          {printRecord ? (
-                            <div className="flex justify-between items-center bg-white p-2.5 rounded-xl border border-emerald-200 shadow-sm print:bg-transparent print:border-none print:p-0 print:shadow-none">
-                              <span className="text-xs font-black text-emerald-700 flex items-center gap-1 print:text-gray-800">
-                                <Printer size={14} className="print:hidden"/> 
-                                출력 완료 ({formatDateTime(printRecord.printedAt)})
-                              </span>
-                              <button onClick={() => togglePrintStatus(subject.name, true)} className="text-gray-400 hover:text-red-500 print:hidden transition-colors" title="출력 표시 취소">
-                                <X size={16}/>
-                              </button>
+                      return (
+                        <div key={subject.name} className={`relative p-6 rounded-3xl border-2 transition-all shadow-sm print:break-inside-avoid ${isComplete ? 'bg-emerald-50/50 border-emerald-100 print:border-gray-300 print:bg-white' : 'bg-white border-gray-200 print:border-gray-300'}`}>
+                          <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-2 print:border-gray-200">
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-lg font-black text-gray-800">{subject.name}</h3>
+                              {subjectSignatures.length > 0 && (
+                                <button onClick={() => {
+                                  const sortedSigs = [...subjectSignatures].sort((a, b) => a.teacherName.localeCompare(b.teacherName, 'ko-KR'));
+                                  setSelectedSubmission(sortedSigs);
+                                }} className="print:hidden text-[11px] bg-blue-100 text-blue-700 px-2 py-1 rounded-md font-bold hover:bg-blue-200 flex items-center gap-1 transition-colors">
+                                  <Printer size={12}/> 통합인쇄
+                                </button>
+                              )}
                             </div>
-                          ) : (
-                            <div className="print:hidden">
-                              <button onClick={() => togglePrintStatus(subject.name, false)} className="w-full py-2.5 bg-gray-800 text-white font-bold text-xs rounded-xl hover:bg-black transition-transform active:scale-95 flex items-center justify-center gap-1 shadow-md">
-                                <CheckCircle size={16}/> 이 과목 출력 완료 표시
-                              </button>
+                            <div className={`px-3 py-1 rounded-full text-xs font-black ${isComplete ? 'bg-emerald-100 text-emerald-700 print:bg-gray-100 print:text-gray-800' : 'bg-gray-100 text-gray-600'}`}>
+                              {submittedCount} / {totalCount} 명
+                            </div>
+                          </div>
+                          
+                          <div className="flex flex-col gap-2 mt-4">
+                            {(subject.teachers || []).length === 0 ? (
+                              <span className="text-xs text-gray-400">등록된 교사가 없습니다.</span>
+                            ) : (
+                              (subject.teachers || []).map(teacher => {
+                                const sigRecord = subjectSignatures.find(s => s.teacherName === teacher);
+                                const hasSubmitted = !!sigRecord;
+                                
+                                return (
+                                  <div key={teacher} className={`flex items-center justify-between p-2.5 rounded-xl border print:border-none print:p-1 print:border-b ${hasSubmitted ? 'bg-white border-emerald-200 print:bg-white' : 'bg-gray-50 border-gray-200'}`}>
+                                    <span className={`text-sm font-bold ${hasSubmitted ? 'text-gray-800' : 'text-gray-400'}`}>
+                                      {teacher} 교사
+                                    </span>
+                                    {hasSubmitted ? (
+                                      <button onClick={() => setSelectedSubmission([sigRecord])} className="flex items-center gap-1 text-[11px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100 hover:bg-emerald-100 transition-colors print:border-none print:bg-transparent print:text-gray-800">
+                                        <FileText size={12} className="print:hidden"/> 개별 확인
+                                      </button>
+                                    ) : (
+                                      <span className="text-xs font-bold text-red-400 print:text-gray-500">미제출</span>
+                                    )}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+
+                          {isComplete && (
+                            <div className="mt-5 pt-4 border-t border-emerald-100/60 print:border-t-2 print:border-gray-400 print:mt-4">
+                              {printRecord ? (
+                                <div className="flex justify-between items-center bg-white p-2.5 rounded-xl border border-emerald-200 shadow-sm print:bg-transparent print:border-none print:p-0 print:shadow-none">
+                                  <span className="text-xs font-black text-emerald-700 flex items-center gap-1 print:text-gray-800">
+                                    <Printer size={14} className="print:hidden"/> 
+                                    출력 완료 ({formatDateTime(printRecord.printedAt)})
+                                  </span>
+                                  <button onClick={() => togglePrintStatus(subject.name, true)} className="text-gray-400 hover:text-red-500 print:hidden transition-colors" title="출력 표시 취소">
+                                    <X size={16}/>
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="print:hidden">
+                                  <button onClick={() => togglePrintStatus(subject.name, false)} className="w-full py-2.5 bg-gray-800 text-white font-bold text-xs rounded-xl hover:bg-black transition-transform active:scale-95 flex items-center justify-center gap-1 shadow-md">
+                                    <CheckCircle size={16}/> 이 과목 출력 완료 표시
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
-                      )}
+                      );
+                    })}
+                  </div>
+                  {subjectsToDisplay.length === 0 && (
+                    <div className="text-center py-12 bg-gray-50 rounded-3xl mt-6">
+                      <p className="text-gray-500 font-bold">이 시험 기간에 기록된 데이터가 없습니다.</p>
                     </div>
-                  );
-                })}
-              </div>
-              {subjectsToDisplay.length === 0 && (
-                <div className="text-center py-12 bg-gray-50 rounded-3xl mt-6">
-                  <p className="text-gray-500 font-bold">이 시험 기간에 기록된 데이터가 없습니다.</p>
+                  )}
+                </div>
+              )}
+
+              {/* 💡 시험 범위표 탭 내용 (인쇄용 레이아웃) */}
+              {statusTab === 'scope' && (
+                <div className="animate-fade-in print:block">
+                  <div className="text-center mb-6 print:mb-8 hidden print:block">
+                    <h2 className="text-3xl font-black tracking-widest">{vYear}학년도 {vSem}학기 {vExam} 시험 범위</h2>
+                  </div>
+                  {renderScheduleTable(true)}
                 </div>
               )}
             </div>
           )}
 
-          {/* 3. 관리자 설정 화면 (비밀번호 확인 필요) */}
+          {/* 4. 관리자 설정 화면 (비밀번호 확인 필요) */}
           {viewMode === 'admin' && !isAdminUnlocked && (
             <div className="w-full max-w-sm bg-white rounded-[2rem] shadow-xl p-8 mt-12 animate-fade-in text-center border border-gray-100 print:hidden">
               <div className="bg-blue-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -854,7 +1118,7 @@ export default function App() {
           )}
           
           {viewMode === 'admin' && isAdminUnlocked && (
-            <div className="w-full max-w-2xl bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-8 md:p-10 animate-fade-in mt-4 print:hidden">
+            <div className="w-full max-w-3xl bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-6 md:p-10 animate-fade-in mt-4 print:hidden">
               <div className="flex justify-between items-start mb-8 border-b border-gray-100 pb-6">
                 <div className="flex items-center gap-3">
                   <div className="bg-purple-100 p-3 rounded-2xl"><Settings className="text-purple-600" size={24}/></div>
@@ -875,6 +1139,7 @@ export default function App() {
 
               <div className="space-y-8">
                 
+                {/* 1. 기본 정보 */}
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   <div className="md:col-span-1">
                     <label className="block text-[10px] font-black text-gray-500 mb-2">연도</label>
@@ -898,40 +1163,97 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* 2. 시험 시간표 설정 */}
                 <div className="pt-4 border-t border-gray-100">
-                  <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
-                    <History size={20} className="text-red-500"/> 과거 시험 기록 관리 (삭제)
-                  </h3>
-                  <div className="bg-red-50/50 border-2 border-red-100 rounded-2xl p-4">
-                    <p className="text-xs font-bold text-red-600 mb-4">
-                      <AlertCircle size={14} className="inline mr-1 -mt-0.5"/> 
-                      테스트로 만든 기록이나 불필요한 과거 기록을 영구적으로 삭제할 수 있습니다. (복구 불가)
+                  <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2"><CalendarDays size={20} className="text-purple-500"/> 시험 시간표 기본틀 관리</h3>
+                  <div className="mb-6 p-5 bg-indigo-50/50 border border-indigo-100 rounded-2xl">
+                    <h4 className="text-sm font-black text-indigo-900 mb-2 flex items-center gap-2">
+                      <FileText size={16}/> 엑셀 시간표 대량 붙여넣기
+                    </h4>
+                    <p className="text-xs text-indigo-700 mb-3 opacity-80 leading-relaxed">
+                      엑셀에서 <strong>[일자] [학년] [교시] [과목]</strong> 4칸 형태의 표를 복사해 붙여넣으세요.<br/>
+                      * 병합된 셀(예: 같은 날짜)은 빈칸으로 들어가므로, 엑셀에서 모든 칸에 날짜/학년을 채워 넣은 뒤 복사해야 완벽합니다!
                     </p>
-                    {examOptions.length === 0 ? (
-                      <p className="text-sm text-gray-500 text-center py-2">기록된 시험이 없습니다.</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {examOptions.map(opt => (
-                          <div key={opt} className="flex justify-between items-center bg-white p-3 rounded-xl border border-red-100 shadow-sm">
-                            <span className="font-bold text-gray-800 text-sm">
-                              {formatExamOption(opt)}
-                            </span>
-                            {deleteExamKey === opt ? (
-                              <div className="flex gap-2">
-                                <button onClick={() => setDeleteExamKey(null)} className="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-300">취소</button>
-                                <button onClick={() => executeDeleteExamRecords(opt)} className="px-3 py-1.5 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700 animate-pulse shadow-sm">
-                                  확인(영구삭제)
-                                </button>
-                              </div>
-                            ) : (
-                              <button onClick={() => setDeleteExamKey(opt)} className="text-red-400 hover:text-red-600 flex items-center gap-1 text-xs font-bold bg-red-50 px-2 py-1 rounded-lg transition-colors border border-red-100">
-                                <Trash2 size={14}/> 삭제
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
+                    <textarea
+                      value={scheduleBulkInput}
+                      onChange={e => setScheduleBulkInput(e.target.value)}
+                      placeholder="예시)&#13;&#10;4월 27일 (월)&#9;1&#9;2&#9;공통국어1&#13;&#10;4월 27일 (월)&#9;1&#9;3&#9;한국사1"
+                      className="w-full h-24 p-3 bg-white border border-indigo-200 rounded-xl text-sm outline-none focus:border-indigo-500 resize-none custom-scrollbar"
+                    />
+                    <button onClick={handleScheduleBulkPaste} type="button" className="mt-3 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-all shadow-sm active:scale-95">
+                      시간표 일괄 적용하기
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">
+                    {(!adminData.examSchedule || adminData.examSchedule.length === 0) && (
+                      <p className="text-center text-sm text-gray-400 py-4">등록된 시간표가 없습니다.</p>
                     )}
+                    {(adminData.examSchedule || []).map(item => (
+                      <div key={item.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-200 shadow-sm transition-all hover:border-indigo-200 text-sm">
+                        <span className="font-medium text-gray-800">
+                          <strong className="w-28 inline-block">{item.date}</strong> | 
+                          <strong className="w-12 inline-block text-center">{item.grade}학년</strong> | 
+                          <span className="w-12 inline-block text-center">{item.period}교시</span> | 
+                          <strong className="ml-2 text-indigo-700">{item.subject}</strong>
+                        </span>
+                        <button onClick={() => removeScheduleItem(item.id)} className="text-gray-400 hover:text-red-500 transition-colors p-1" title="삭제">
+                          <Trash2 size={16}/>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-gray-100">
+                  <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2"><Users size={20} className="text-purple-500"/> 서명용 과목 및 교사 명단 보관함</h3>
+
+                  <div className="mb-6 p-5 bg-purple-50/50 border border-purple-100 rounded-2xl">
+                    <h4 className="text-sm font-black text-purple-900 mb-2 flex items-center gap-2">
+                      <FileText size={16}/> 엑셀 명단 대량 붙여넣기
+                    </h4>
+                    <p className="text-xs text-purple-700 mb-3 opacity-80">
+                      엑셀에서 <strong>[과목명] [교사명1] [교사명2]...</strong> 형태의 표를 복사해 아래에 붙여넣고 적용 버튼을 누르세요.
+                    </p>
+                    <textarea
+                      value={bulkInput}
+                      onChange={e => setBulkInput(e.target.value)}
+                      placeholder="예시)&#13;&#10;공통국어1&#9;홍길동&#9;이순신"
+                      className="w-full h-24 p-3 bg-white border border-purple-200 rounded-xl text-sm outline-none focus:border-purple-500 resize-none custom-scrollbar"
+                    />
+                    <button onClick={handleBulkPaste} type="button" className="mt-3 px-4 py-2 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700 transition-all shadow-sm active:scale-95">
+                      명단 일괄 적용하기
+                    </button>
+                  </div>
+                  
+                  <div className="flex gap-2 mb-6">
+                    <input type="text" value={newSubject} onChange={e=>setNewSubject(e.target.value)} placeholder="새 과목 직접 추가 (예: 역사)" className="flex-1 p-3 bg-white border-2 border-gray-200 rounded-xl text-sm font-bold focus:border-purple-500 outline-none"/>
+                    <button onClick={addSubject} className="bg-gray-800 text-white px-5 rounded-xl font-bold hover:bg-black transition-all shadow-md active:scale-95 whitespace-nowrap">과목 추가</button>
+                  </div>
+
+                  <div className="space-y-4 max-h-96 overflow-y-auto custom-scrollbar pr-2">
+                    {(adminData.subjects || []).map(subject => (
+                      <div key={subject.name} className="bg-gray-50 border-2 border-gray-100 rounded-2xl p-4">
+                        <div className="flex justify-between items-center border-b border-gray-200 pb-3 mb-3">
+                          <span className="font-black text-lg text-purple-900">{subject.name}</span>
+                          <button onClick={() => removeSubject(subject.name)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-2 mb-4">
+                          {(subject.teachers || []).map(teacher => (
+                            <span key={teacher} className="bg-white border border-gray-200 px-3 py-1.5 rounded-lg text-sm font-bold text-gray-700 flex items-center gap-2 shadow-sm">
+                              {teacher}
+                              <button onClick={()=>removeTeacherFromSubject(subject.name, teacher)} className="text-gray-400 hover:text-red-500"><X size={14}/></button>
+                            </span>
+                          ))}
+                        </div>
+
+                        <div className="flex gap-2">
+                          <input type="text" value={newTeachers[subject.name] || ''} onChange={e=>setNewTeachers({...newTeachers, [subject.name]: e.target.value})} placeholder="교사 성함 직접 추가" className="flex-1 p-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:border-purple-500 outline-none"/>
+                          <button onClick={()=>addTeacherToSubject(subject.name)} className="bg-gray-200 text-gray-700 px-4 rounded-lg font-bold hover:bg-gray-300 transition-all text-sm flex items-center gap-1"><Plus size={16}/> 추가</button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
@@ -975,58 +1297,43 @@ export default function App() {
                 </div>
 
                 <div className="pt-4 border-t border-gray-100">
-                  <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2"><Users size={20} className="text-purple-500"/> 과목 및 교사 명단 보관함</h3>
-
-                  <div className="mb-6 p-5 bg-purple-50/50 border border-purple-100 rounded-2xl">
-                    <h4 className="text-sm font-black text-purple-900 mb-2 flex items-center gap-2">
-                      <FileText size={16}/> 엑셀 명단 대량 붙여넣기
-                    </h4>
-                    <p className="text-xs text-purple-700 mb-3 opacity-80">
-                      엑셀에서 <strong>[과목명] [교사명1] [교사명2]...</strong> 형태의 표를 복사해 아래에 붙여넣고 적용 버튼을 누르세요.
+                  <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
+                    <History size={20} className="text-red-500"/> 과거 시험 기록 관리 (삭제)
+                  </h3>
+                  <div className="bg-red-50/50 border-2 border-red-100 rounded-2xl p-4">
+                    <p className="text-xs font-bold text-red-600 mb-4">
+                      <AlertCircle size={14} className="inline mr-1 -mt-0.5"/> 
+                      테스트로 만든 기록이나 불필요한 과거 기록을 영구적으로 삭제할 수 있습니다. (복구 불가)
                     </p>
-                    <textarea
-                      value={bulkInput}
-                      onChange={e => setBulkInput(e.target.value)}
-                      placeholder="예시)&#13;&#10;국어&#9;홍길동&#9;이순신"
-                      className="w-full h-24 p-3 bg-white border border-purple-200 rounded-xl text-sm outline-none focus:border-purple-500 resize-none custom-scrollbar"
-                    />
-                    <button onClick={handleBulkPaste} type="button" className="mt-3 px-4 py-2 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700 transition-all shadow-sm active:scale-95">
-                      명단 일괄 적용하기
-                    </button>
-                  </div>
-                  
-                  <div className="flex gap-2 mb-6">
-                    <input type="text" value={newSubject} onChange={e=>setNewSubject(e.target.value)} placeholder="새 과목 직접 추가 (예: 역사)" className="flex-1 p-3 bg-white border-2 border-gray-200 rounded-xl text-sm font-bold focus:border-purple-500 outline-none"/>
-                    <button onClick={addSubject} className="bg-gray-800 text-white px-5 rounded-xl font-bold hover:bg-black transition-all shadow-md active:scale-95 whitespace-nowrap">과목 추가</button>
-                  </div>
-
-                  <div className="space-y-4">
-                    {(adminData.subjects || []).map(subject => (
-                      <div key={subject.name} className="bg-gray-50 border-2 border-gray-100 rounded-2xl p-4">
-                        <div className="flex justify-between items-center border-b border-gray-200 pb-3 mb-3">
-                          <span className="font-black text-lg text-purple-900">{subject.name}</span>
-                          <button onClick={() => removeSubject(subject.name)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
-                        </div>
-                        
-                        <div className="flex flex-wrap gap-2 mb-4">
-                          {(subject.teachers || []).map(teacher => (
-                            <span key={teacher} className="bg-white border border-gray-200 px-3 py-1.5 rounded-lg text-sm font-bold text-gray-700 flex items-center gap-2 shadow-sm">
-                              {teacher}
-                              <button onClick={()=>removeTeacherFromSubject(subject.name, teacher)} className="text-gray-400 hover:text-red-500"><X size={14}/></button>
+                    {examOptions.length === 0 ? (
+                      <p className="text-sm text-gray-500 text-center py-2">기록된 시험이 없습니다.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-2">
+                        {examOptions.map(opt => (
+                          <div key={opt} className="flex justify-between items-center bg-white p-3 rounded-xl border border-red-100 shadow-sm">
+                            <span className="font-bold text-gray-800 text-sm">
+                              {formatExamOption(opt)}
                             </span>
-                          ))}
-                        </div>
-
-                        <div className="flex gap-2">
-                          <input type="text" value={newTeachers[subject.name] || ''} onChange={e=>setNewTeachers({...newTeachers, [subject.name]: e.target.value})} placeholder="교사 성함 직접 추가" className="flex-1 p-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:border-purple-500 outline-none"/>
-                          <button onClick={()=>addTeacherToSubject(subject.name)} className="bg-gray-200 text-gray-700 px-4 rounded-lg font-bold hover:bg-gray-300 transition-all text-sm flex items-center gap-1"><Plus size={16}/> 추가</button>
-                        </div>
+                            {deleteExamKey === opt ? (
+                              <div className="flex gap-2">
+                                <button onClick={() => setDeleteExamKey(null)} className="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-300">취소</button>
+                                <button onClick={() => executeDeleteExamRecords(opt)} className="px-3 py-1.5 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700 animate-pulse shadow-sm">
+                                  확인(영구삭제)
+                                </button>
+                              </div>
+                            ) : (
+                              <button onClick={() => setDeleteExamKey(opt)} className="text-red-400 hover:text-red-600 flex items-center gap-1 text-xs font-bold bg-red-50 px-2 py-1 rounded-lg transition-colors border border-red-100">
+                                <Trash2 size={14}/> 삭제
+                              </button>
+                            )}
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
 
-                <button onClick={handleAdminSave} className="w-full py-5 bg-purple-600 text-white rounded-2xl font-black text-lg shadow-xl shadow-purple-200 hover:bg-purple-700 transition-all active:scale-95 flex items-center justify-center gap-2 mt-8">
+                <button onClick={handleAdminSave} className="w-full py-5 bg-purple-600 text-white rounded-2xl font-black text-lg shadow-xl shadow-purple-200 hover:bg-purple-700 transition-all active:scale-95 flex items-center justify-center gap-2 mt-8 sticky bottom-4">
                   <Save size={24}/> 전체 설정 저장하기 (데이터 보존)
                 </button>
 
