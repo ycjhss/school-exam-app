@@ -523,6 +523,49 @@ export default function App() {
         csv += `${subject.name},${teacher},${status},${date}\n`;
       });
     });
+
+    // 💡 시험 범위표 엑셀 다운로드용 CSV 내보내기
+const handleExportScopeCSV = () => {
+  // 엑셀에서 쉼표, 줄바꿈, 따옴표가 깨지지 않도록 처리
+  const escapeCSV = (value) => {
+    if (value === null || value === undefined) return '';
+    const str = String(value);
+    return `"${str.replace(/"/g, '""')}"`;
+  };
+
+  let csv = "\uFEFF일자,학년,교시,과목,시험 범위,작성자,최종수정일\n";
+
+  scheduleToDisplay.forEach((item) => {
+    const scopeId = getScopeId(vYear, vSem, vExam, item);
+    const scopeDoc = viewingScopes.find(s => s.id === scopeId);
+
+    const row = [
+      item.date,
+      item.grade,
+      item.period,
+      item.subject,
+      scopeDoc ? (scopeDoc.scopeText || '') : '',
+      scopeDoc ? (scopeDoc.teacherName || '') : '',
+      scopeDoc ? getDisplayDate(scopeDoc) : ''
+    ];
+
+    csv += row.map(escapeCSV).join(',') + '\n';
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = `시험범위표_${vYear}_${vSem}학기_${vExam}.csv`;
+
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  URL.revokeObjectURL(url);
+};
+    
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -999,17 +1042,31 @@ export default function App() {
                   </div>
 
                   <div className="flex gap-2">
-                    {statusTab === 'signature' && (
-                      <button onClick={handleExportCSV} className="bg-blue-50 text-blue-700 px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-blue-100 transition-colors border border-blue-200">
-                        <Download size={16} /> 엑셀
-                      </button>
-                    )}
-                    <button onClick={() => window.print()} className="bg-gray-800 text-white px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-black transition-colors shadow-md whitespace-nowrap">
-                      <Printer size={16} /> {statusTab === 'scope' ? '범위표 인쇄' : '현황판 인쇄'}
-                    </button>
-                  </div>
-                </div>
-              </div>
+  {statusTab === 'signature' && (
+    <button
+      onClick={handleExportCSV}
+      className="bg-blue-50 text-blue-700 px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-blue-100 transition-colors border border-blue-200"
+    >
+      <Download size={16} /> 엑셀
+    </button>
+  )}
+
+  {statusTab === 'scope' && (
+    <button
+      onClick={handleExportScopeCSV}
+      className="bg-indigo-50 text-indigo-700 px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-indigo-100 transition-colors border border-indigo-200"
+    >
+      <Download size={16} /> 엑셀
+    </button>
+  )}
+
+  <button
+    onClick={() => window.print()}
+    className="bg-gray-800 text-white px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-black transition-colors shadow-md whitespace-nowrap"
+  >
+    <Printer size={16} /> {statusTab === 'scope' ? '범위표 인쇄' : '현황판 인쇄'}
+  </button>
+</div>
 
               {/* 💡 서명 현황 탭 내용 */}
               {statusTab === 'signature' && (
