@@ -357,34 +357,50 @@ export default function App() {
   };
 
   // 💡 시험 범위 저장 (선생님 입력)
-  const handleScopeSubmit = async (e) => {
-    e.preventDefault();
-    if (!selectedScheduleItem || !scopeInputTeacher) {
-      alert("성함을 입력해주세요."); return;
-    }
-    setIsSaving(true);
-    try {
-      const vYear = String(globalSettings.year);
-      const vSem = String(globalSettings.semester);
-      const vExam = String(globalSettings.examName);
-      const docId = getScopeId(vYear, vSem, vExam, selectedScheduleItem);
-      
-      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examScopes', docId), {
-        year: vYear, semester: vSem, examName: vExam,
-        date: selectedScheduleItem.date,
-        grade: selectedScheduleItem.grade,
-        period: selectedScheduleItem.period,
-        subject: selectedScheduleItem.subject,
-        scopeText: scopeInputText,
-        teacherName: scopeInputTeacher,
-        updatedAt: serverTimestamp()
-      });
-      setSelectedScheduleItem(null); setScopeInputText(''); setScopeInputTeacher('');
-    } catch (err) {
-      alert("저장 중 오류가 발생했습니다.");
-    }
-    setIsSaving(false);
-  };
+ const handleScopeSubmit = async (e) => {
+  e.preventDefault();
+
+  // 시험 범위 내용은 비워둘 수 있게 하고,
+  // 작성자 이름만 필수로 유지
+  if (!selectedScheduleItem || !scopeInputTeacher.trim()) {
+    alert("성함을 입력해주세요.");
+    return;
+  }
+
+  setIsSaving(true);
+
+  try {
+    const vYear = String(globalSettings.year);
+    const vSem = String(globalSettings.semester);
+    const vExam = String(globalSettings.examName);
+    const docId = getScopeId(vYear, vSem, vExam, selectedScheduleItem);
+    
+    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examScopes', docId), {
+      year: vYear,
+      semester: vSem,
+      examName: vExam,
+      date: selectedScheduleItem.date,
+      grade: selectedScheduleItem.grade,
+      period: selectedScheduleItem.period,
+      subject: selectedScheduleItem.subject,
+
+      // 빈 문자열도 그대로 저장되도록 함
+      scopeText: scopeInputText,
+
+      teacherName: scopeInputTeacher.trim(),
+      updatedAt: serverTimestamp()
+    });
+
+    setSelectedScheduleItem(null);
+    setScopeInputText('');
+    setScopeInputTeacher('');
+  } catch (err) {
+    console.error(err);
+    alert("저장 중 오류가 발생했습니다.");
+  }
+
+  setIsSaving(false);
+};
 
   const handleAdminSave = async () => {
     try {
@@ -619,7 +635,11 @@ export default function App() {
                   <td className="border border-black p-2">{item.period}</td>
                   <td className="border border-black p-2 font-bold">{item.subject}</td>
                   <td className="border border-black p-3 text-left whitespace-pre-wrap min-w-[200px] leading-relaxed">
-                    {scopeDoc?.scopeText || (isPrintView ? '' : <span className="text-gray-300 italic">미입력</span>)}
+{
+  scopeDoc
+    ? scopeDoc.scopeText
+    : (isPrintView ? '' : <span className="text-gray-300 italic">미입력</span>)
+}
                     {!isPrintView && scopeDoc && (
                       <div className="text-[10px] text-gray-400 mt-2 font-medium text-right">
                         마지막 수정: {scopeDoc.teacherName} ({getDisplayDate(scopeDoc)})
@@ -766,7 +786,6 @@ export default function App() {
                   onChange={e => setScopeInputText(e.target.value)} 
                   className="w-full h-32 p-3 bg-gray-50 border-2 border-gray-200 rounded-xl text-sm outline-none focus:border-blue-500 resize-none"
                   placeholder="예: 교과서 p.12 ~ p.56, 학습지 1~3회차"
-                  required
                 />
               </div>
               <div>
