@@ -95,7 +95,8 @@ const getScopeId = (vYear, vSem, vExam, item) => {
   return `${vYear}_${vSem}_${vExam}_${item.date}_${item.grade}_${item.period}_${item.subject}`.replace(/\s/g, '');
 };
 
-const SignaturePad = ({ onSave }) => {
+// 💡 오류 수정: 전달값(props)에 resetTrigger가 누락되어 있던 것을 복구했습니다.
+const SignaturePad = ({ onSave, resetTrigger }) => {
   const canvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
 
@@ -119,6 +120,8 @@ const SignaturePad = ({ onSave }) => {
     window.addEventListener('resize', initCanvas);
     return () => window.removeEventListener('resize', initCanvas);
   }, []);
+
+  useEffect(() => { if (resetTrigger) clearCanvas(); }, [resetTrigger]);
 
   const getCoordinates = (e) => {
     const canvas = canvasRef.current;
@@ -224,7 +227,8 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [deleteStep, setDeleteStep] = useState(0); 
-  
+  const [resetSigCounter, setResetSigCounter] = useState(0);
+
   // Scope Input State
   const [examScopes, setExamScopes] = useState([]); // 💡 전체 시험 범위 데이터
   const [selectedScheduleItem, setSelectedScheduleItem] = useState(null);
@@ -337,7 +341,7 @@ export default function App() {
         createdAt: serverTimestamp(), 
         uid: user.uid
       });
-      setSaveSuccess(true); setSelectedTeacher(''); setSignatureData(null);
+      setSaveSuccess(true); setSelectedTeacher(''); setSignatureData(null); setResetSigCounter(c => c+1);
       setTimeout(() => { setSaveSuccess(false); setSelectedSubject(''); }, 3000);
     } catch (e) { 
       setSubmitError("데이터베이스 연결 오류입니다. 관리자에게 문의하세요.");
@@ -357,50 +361,47 @@ export default function App() {
   };
 
   // 💡 시험 범위 저장 (선생님 입력)
- const handleScopeSubmit = async (e) => {
-  e.preventDefault();
+  const handleScopeSubmit = async (e) => {
+    e.preventDefault();
 
-  // 시험 범위 내용은 비워둘 수 있게 하고,
-  // 작성자 이름만 필수로 유지
-  if (!selectedScheduleItem || !scopeInputTeacher.trim()) {
-    alert("성함을 입력해주세요.");
-    return;
-  }
+    // 시험 범위 내용은 비워둘 수 있게 하고, 작성자 이름만 필수로 유지
+    if (!selectedScheduleItem || !scopeInputTeacher.trim()) {
+      alert("성함을 입력해주세요.");
+      return;
+    }
 
-  setIsSaving(true);
+    setIsSaving(true);
 
-  try {
-    const vYear = String(globalSettings.year);
-    const vSem = String(globalSettings.semester);
-    const vExam = String(globalSettings.examName);
-    const docId = getScopeId(vYear, vSem, vExam, selectedScheduleItem);
-    
-    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examScopes', docId), {
-      year: vYear,
-      semester: vSem,
-      examName: vExam,
-      date: selectedScheduleItem.date,
-      grade: selectedScheduleItem.grade,
-      period: selectedScheduleItem.period,
-      subject: selectedScheduleItem.subject,
+    try {
+      const vYear = String(globalSettings.year);
+      const vSem = String(globalSettings.semester);
+      const vExam = String(globalSettings.examName);
+      const docId = getScopeId(vYear, vSem, vExam, selectedScheduleItem);
+      
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examScopes', docId), {
+        year: vYear,
+        semester: vSem,
+        examName: vExam,
+        date: selectedScheduleItem.date,
+        grade: selectedScheduleItem.grade,
+        period: selectedScheduleItem.period,
+        subject: selectedScheduleItem.subject,
+        // 빈 문자열도 그대로 저장되도록 함
+        scopeText: scopeInputText,
+        teacherName: scopeInputTeacher.trim(),
+        updatedAt: serverTimestamp()
+      });
 
-      // 빈 문자열도 그대로 저장되도록 함
-      scopeText: scopeInputText,
+      setSelectedScheduleItem(null);
+      setScopeInputText('');
+      setScopeInputTeacher('');
+    } catch (err) {
+      console.error(err);
+      alert("저장 중 오류가 발생했습니다.");
+    }
 
-      teacherName: scopeInputTeacher.trim(),
-      updatedAt: serverTimestamp()
-    });
-
-    setSelectedScheduleItem(null);
-    setScopeInputText('');
-    setScopeInputTeacher('');
-  } catch (err) {
-    console.error(err);
-    alert("저장 중 오류가 발생했습니다.");
-  }
-
-  setIsSaving(false);
-};
+    setIsSaving(false);
+  };
 
   const handleAdminSave = async () => {
     try {
@@ -524,48 +525,6 @@ export default function App() {
       });
     });
 
-    // 💡 시험 범위표 엑셀 다운로드용 CSV 내보내기
-const handleExportScopeCSV = () => {
-  // 엑셀에서 쉼표, 줄바꿈, 따옴표가 깨지지 않도록 처리
-  const escapeCSV = (value) => {
-    if (value === null || value === undefined) return '';
-    const str = String(value);
-    return `"${str.replace(/"/g, '""')}"`;
-  };
-
-  let csv = "\uFEFF일자,학년,교시,과목,시험 범위,작성자,최종수정일\n";
-
-  scheduleToDisplay.forEach((item) => {
-    const scopeId = getScopeId(vYear, vSem, vExam, item);
-    const scopeDoc = viewingScopes.find(s => s.id === scopeId);
-
-    const row = [
-      item.date,
-      item.grade,
-      item.period,
-      item.subject,
-      scopeDoc ? (scopeDoc.scopeText || '') : '',
-      scopeDoc ? (scopeDoc.teacherName || '') : '',
-      scopeDoc ? getDisplayDate(scopeDoc) : ''
-    ];
-
-    csv += row.map(escapeCSV).join(',') + '\n';
-  });
-
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = url;
-  link.download = `시험범위표_${vYear}_${vSem}학기_${vExam}.csv`;
-
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-
-  URL.revokeObjectURL(url);
-};
-    
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -574,6 +533,48 @@ const handleExportScopeCSV = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  // 💡 오류 수정: 엑셀 다운로드 함수가 외부로 정상 분리되었습니다.
+  const handleExportScopeCSV = () => {
+    // 엑셀에서 쉼표, 줄바꿈, 따옴표가 깨지지 않도록 처리
+    const escapeCSV = (value) => {
+      if (value === null || value === undefined) return '';
+      const str = String(value);
+      return `"${str.replace(/"/g, '""')}"`;
+    };
+
+    let csv = "\uFEFF일자,학년,교시,과목,시험 범위,작성자,최종수정일\n";
+
+    scheduleToDisplay.forEach((item) => {
+      const scopeId = getScopeId(vYear, vSem, vExam, item);
+      const scopeDoc = viewingScopes.find(s => s.id === scopeId);
+
+      const row = [
+        item.date,
+        item.grade,
+        item.period,
+        item.subject,
+        scopeDoc ? (scopeDoc.scopeText || '') : '',
+        scopeDoc ? (scopeDoc.teacherName || '') : '',
+        scopeDoc ? getDisplayDate(scopeDoc) : ''
+      ];
+
+      csv += row.map(escapeCSV).join(',') + '\n';
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = `시험범위표_${vYear}_${vSem}학기_${vExam}.csv`;
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
   };
 
   const togglePrintStatus = async (subjectName, isCurrentlyPrinted) => {
@@ -678,11 +679,11 @@ const handleExportScopeCSV = () => {
                   <td className="border border-black p-2">{item.period}</td>
                   <td className="border border-black p-2 font-bold">{item.subject}</td>
                   <td className="border border-black p-3 text-left whitespace-pre-wrap min-w-[200px] leading-relaxed">
-{
-  scopeDoc
-    ? scopeDoc.scopeText
-    : (isPrintView ? '' : <span className="text-gray-300 italic">미입력</span>)
-}
+                    {
+                      scopeDoc
+                        ? scopeDoc.scopeText
+                        : (isPrintView ? '' : <span className="text-gray-300 italic">미입력</span>)
+                    }
                     {!isPrintView && scopeDoc && (
                       <div className="text-[10px] text-gray-400 mt-2 font-medium text-right">
                         마지막 수정: {scopeDoc.teacherName} ({getDisplayDate(scopeDoc)})
@@ -980,7 +981,7 @@ const handleExportScopeCSV = () => {
                       ) : (
                         <div className="animate-fade-in space-y-3 pt-2">
                           <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2">Signature</label>
-                          <SignaturePad onSave={setSignatureData} />
+                          <SignaturePad onSave={setSignatureData} resetTrigger={resetSigCounter} />
                           <button type="submit" disabled={isSaving || !signatureData} className="w-full py-5 bg-gray-900 text-white rounded-[1.5rem] font-black text-lg shadow-xl shadow-gray-200 hover:bg-black transition-all active:scale-95 disabled:bg-gray-300 flex items-center justify-center gap-2 mt-4">
                             {isSaving ? '클라우드에 안전하게 보존 중...' : <><Save size={20}/> 확인 및 서명 제출</>}
                           </button>
@@ -1042,33 +1043,34 @@ const handleExportScopeCSV = () => {
                   </div>
 
                   <div className="flex gap-2">
-  {statusTab === 'signature' && (
-    <button
-      onClick={handleExportCSV}
-      className="bg-blue-50 text-blue-700 px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-blue-100 transition-colors border border-blue-200"
-    >
-      <Download size={16} /> 엑셀
-    </button>
-  )}
+                    {statusTab === 'signature' && (
+                      <button
+                        onClick={handleExportCSV}
+                        className="bg-blue-50 text-blue-700 px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-blue-100 transition-colors border border-blue-200"
+                      >
+                        <Download size={16} /> 엑셀
+                      </button>
+                    )}
 
-  {statusTab === 'scope' && (
-    <button
-      onClick={handleExportScopeCSV}
-      className="bg-indigo-50 text-indigo-700 px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-indigo-100 transition-colors border border-indigo-200"
-    >
-      <Download size={16} /> 엑셀
-    </button>
-  )}
+                    {statusTab === 'scope' && (
+                      <button
+                        onClick={handleExportScopeCSV}
+                        className="bg-indigo-50 text-indigo-700 px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-indigo-100 transition-colors border border-indigo-200"
+                      >
+                        <Download size={16} /> 엑셀
+                      </button>
+                    )}
 
-  <button
-    onClick={() => window.print()}
-    className="bg-gray-800 text-white px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-black transition-colors shadow-md whitespace-nowrap"
-  >
-    <Printer size={16} /> {statusTab === 'scope' ? '범위표 인쇄' : '현황판 인쇄'}
-  </button>
+                    <button
+                      onClick={() => window.print()}
+                      className="bg-gray-800 text-white px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-black transition-colors shadow-md whitespace-nowrap"
+                    >
+                      <Printer size={16} /> {statusTab === 'scope' ? '범위표 인쇄' : '현황판 인쇄'}
+                    </button>
                   </div>
                 </div>
-</div>
+              </div>
+
               {/* 💡 서명 현황 탭 내용 */}
               {statusTab === 'signature' && (
                 <div className="animate-fade-in print:block">
