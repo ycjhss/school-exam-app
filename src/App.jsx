@@ -1066,6 +1066,8 @@ const handleExportScopeCSV = () => {
   >
     <Printer size={16} /> {statusTab === 'scope' ? '범위표 인쇄' : '현황판 인쇄'}
   </button>
+                  </div>
+                </div>
 </div>
               {/* 💡 서명 현황 탭 내용 */}
               {statusTab === 'signature' && (
