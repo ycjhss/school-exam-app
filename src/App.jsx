@@ -858,7 +858,7 @@ export default function App() {
             <div className="bg-blue-600 p-1.5 sm:p-2 rounded-xl shadow-lg shadow-blue-200">
               <FileText className="text-white w-4 h-4 sm:w-5 sm:h-5"/>
             </div>
-            <h1 className="text-base sm:text-xl font-black text-gray-800 tracking-tight whitespace-nowrap">스마트 출제 검토</h1>
+            <h1 className="text-base sm:text-xl font-black text-gray-800 tracking-tight whitespace-nowrap">백송고 정기고사</h1>
           </div>
           <div className="flex bg-gray-200/50 p-1 rounded-xl sm:rounded-2xl border border-gray-200 overflow-x-auto custom-scrollbar no-scrollbar">
             <button onClick={() => setViewMode('teacher')} className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all duration-200 whitespace-nowrap flex items-center gap-1 ${viewMode==='teacher'?'bg-white text-blue-600 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}>
