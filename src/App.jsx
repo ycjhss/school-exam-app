@@ -119,7 +119,7 @@ const printStyles = `
       width: 100% !important;
       table-layout: fixed !important;
       border-collapse: collapse !important;
-      margin: 0 0 9mm 0 !important;
+      margin: 0 0 10mm 0 !important;
       page-break-inside: avoid !important;
       break-inside: avoid !important;
     }
@@ -134,25 +134,25 @@ const printStyles = `
     }
 
     .print-document-content th {
-      padding: 2.8mm 2mm !important;
-      font-size: 10pt !important;
-      line-height: 1.25 !important;
+      padding: 3.6mm 2.5mm !important;
+      font-size: 12pt !important;
+      line-height: 1.28 !important;
       background: #f3f4f6 !important;
     }
 
     .print-document-content td {
-      padding: 2.25mm 2mm !important;
-      font-size: 9.5pt !important;
-      line-height: 1.32 !important;
+      padding: 3.15mm 2.5mm !important;
+      font-size: 11.7pt !important;
+      line-height: 1.35 !important;
     }
 
     .print-document-content td:last-child,
     .print-document-content th:last-child {
-      width: 22mm !important;
+      width: 24mm !important;
     }
 
     .print-signature-area {
-      flex: 1 1 auto !important;
+      flex: 0 0 auto !important;
       min-height: 0 !important;
       margin-top: 2mm !important;
       background: #ffffff !important;
@@ -171,33 +171,33 @@ const printStyles = `
     }
 
     .print-signature-list {
-      flex: 1 1 auto !important;
+      flex: 0 0 auto !important;
       width: 100% !important;
       padding-right: 0 !important;
-      margin-top: 4mm !important;
+      margin-top: 3mm !important;
       margin-bottom: 0 !important;
       font-size: 12pt !important;
       background: #ffffff !important;
       display: flex !important;
       flex-direction: column !important;
-      justify-content: space-between !important;
-      gap: 0 !important;
+      justify-content: flex-start !important;
+      gap: 5mm !important;
     }
 
     .print-signature-list.signature-count-1 {
       flex: 0 0 auto !important;
       justify-content: flex-start !important;
-      gap: 7mm !important;
+      gap: 5mm !important;
     }
 
     .print-signature-row {
       page-break-inside: avoid !important;
       break-inside: avoid !important;
-      min-height: 15mm !important;
+      min-height: 13mm !important;
     }
 
     .print-signature-row img {
-      height: 15mm !important;
+      height: 14mm !important;
       width: 38mm !important;
       max-width: none !important;
       object-fit: contain !important;
