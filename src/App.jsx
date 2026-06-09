@@ -398,7 +398,7 @@ const SignaturePad = ({ onSave, resetTrigger }) => {
 export default function App() {
   const [user, setUser] = useState(null);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
-  const [viewMode, setViewMode] = useState('teacher'); 
+  const [viewMode, setViewMode] = useState('home'); 
   const [statusTab, setStatusTab] = useState('signature');
   
   const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
@@ -1029,12 +1029,17 @@ export default function App() {
       {/* 💡 3. 전체 메인 레이아웃 (팝업이 열려있으면 인쇄 시 숨김) */}
       <div className={`${selectedSubmission || selectedScheduleItem ? 'print:hidden' : ''} flex flex-col flex-1`}>
         <header className="bg-white/90 backdrop-blur-md sticky top-0 z-10 border-b border-gray-200 px-3 sm:px-6 py-3 flex justify-between items-center shadow-sm print:hidden">
-          <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            type="button"
+            onClick={() => setViewMode('home')}
+            className="flex items-center gap-2 sm:gap-3 text-left hover:opacity-90 transition-opacity"
+            title="첫 화면으로 이동"
+          >
             <div className="bg-blue-600 p-1.5 sm:p-2 rounded-xl shadow-lg shadow-blue-200">
               <FileText className="text-white w-4 h-4 sm:w-5 sm:h-5"/>
             </div>
             <h1 className="text-base sm:text-xl font-black text-gray-800 tracking-tight whitespace-nowrap">백송고 정기고사</h1>
-          </div>
+          </button>
           <div className="flex bg-gray-200/50 p-1 rounded-xl sm:rounded-2xl border border-gray-200 overflow-x-auto custom-scrollbar no-scrollbar">
             <button onClick={() => setViewMode('teacher')} className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all duration-200 whitespace-nowrap flex items-center gap-1 ${viewMode==='teacher'?'bg-white text-blue-600 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}>
               <Edit2 size={12}/>출제 서명
@@ -1053,10 +1058,85 @@ export default function App() {
 
         <main className="flex-1 flex flex-col items-center justify-start p-4 md:p-8 animate-fade-in relative z-0 print:p-0">
           
+          {/* 3-0. 첫 화면: 교사용 업무 선택 */}
+          {viewMode === 'home' && (
+            <div className="w-full max-w-5xl animate-fade-in mt-6">
+              <div className="bg-white rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-6 md:p-10 mb-6 text-center">
+                <div className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2 rounded-full text-xs font-black mb-5 border border-blue-100">
+                  <FileText size={14}/> {String(globalSettings.year)}년 {String(globalSettings.semester)}학기 {String(globalSettings.examName)}
+                </div>
+                <h2 className="text-2xl md:text-4xl font-black text-gray-900 tracking-tight mb-3">처리할 업무를 선택해 주세요</h2>
+                <p className="text-gray-500 text-sm md:text-base font-medium leading-relaxed">
+                  출제 검토 확인서 서명과 시험 범위 입력을 각각 진행할 수 있습니다.<br className="hidden md:block" />
+                  두 항목을 모두 완료해야 정기고사 자료 제출이 마무리됩니다.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('teacher')}
+                  className="group bg-white rounded-[2rem] p-7 md:p-8 border-2 border-blue-100 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-blue-400 transition-all text-left overflow-hidden relative"
+                >
+                  <div className="absolute right-0 top-0 w-32 h-32 bg-blue-50 rounded-bl-full opacity-70 group-hover:bg-blue-100 transition-colors" />
+                  <div className="relative z-10">
+                    <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-100 mb-5">
+                      <Edit2 size={26}/>
+                    </div>
+                    <p className="text-xs font-black text-blue-600 tracking-[0.2em] mb-2">STEP 1</p>
+                    <h3 className="text-2xl font-black text-gray-900 mb-3">출제 검토 확인서</h3>
+                    <p className="text-sm text-gray-500 font-medium leading-relaxed mb-6">
+                      과목과 성함을 선택한 뒤 검토 항목을 확인하고 서명합니다.
+                    </p>
+                    <div className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-black text-center group-hover:bg-blue-700 transition-colors">
+                      확인서 서명하기
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setViewMode('scope')}
+                  className="group bg-white rounded-[2rem] p-7 md:p-8 border-2 border-indigo-100 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-indigo-400 transition-all text-left overflow-hidden relative"
+                >
+                  <div className="absolute right-0 top-0 w-32 h-32 bg-indigo-50 rounded-bl-full opacity-70 group-hover:bg-indigo-100 transition-colors" />
+                  <div className="relative z-10">
+                    <div className="w-14 h-14 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-100 mb-5">
+                      <CalendarDays size={26}/>
+                    </div>
+                    <p className="text-xs font-black text-indigo-600 tracking-[0.2em] mb-2">STEP 2</p>
+                    <h3 className="text-2xl font-black text-gray-900 mb-3">시험 범위 입력</h3>
+                    <p className="text-sm text-gray-500 font-medium leading-relaxed mb-6">
+                      담당 과목의 시험 범위를 입력하거나 이미 입력된 범위를 수정합니다.
+                    </p>
+                    <div className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-black text-center group-hover:bg-indigo-700 transition-colors">
+                      시험 범위 입력하기
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              <div className="mt-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 text-center">
+                <p className="text-sm font-bold text-amber-800">
+                  안내: 출제 검토 확인서만 제출하고 나가지 않도록, 서명 후에는 첫 화면으로 돌아와 시험 범위 입력까지 확인해 주세요.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* 3-1. 교사 서명 화면 */}
           {viewMode === 'teacher' && (
             <div className="w-full max-w-md bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] overflow-hidden border border-white relative mt-4">
-              <div className="bg-gradient-to-br from-blue-600 to-blue-800 text-white p-8 text-center relative overflow-hidden">
+              <div className="px-6 pt-5 pb-0 print:hidden">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('home')}
+                  className="text-xs font-black text-gray-500 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-200 px-3 py-2 rounded-xl transition-all"
+                >
+                  ← 첫 화면으로
+                </button>
+              </div>
+              <div className="bg-gradient-to-br from-blue-600 to-blue-800 text-white p-8 text-center relative overflow-hidden mt-4">
                 <h2 className="text-2xl font-black mb-2 relative z-10">출제 검토 확인서</h2>
                 <p className="text-blue-100 text-sm font-medium opacity-90 relative z-10">
                   {String(globalSettings.year)}년 {String(globalSettings.semester)}학기 {String(globalSettings.examName)}
@@ -1070,6 +1150,22 @@ export default function App() {
                   </div>
                   <h3 className="text-2xl font-black text-gray-800">제출 완료!</h3>
                   <p className="text-gray-500 mt-3 text-sm font-medium">감사합니다. 문서가 클라우드에 영구 보존되었습니다.</p>
+                  <div className="mt-8 space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('home')}
+                      className="w-full py-3.5 bg-gray-900 text-white rounded-xl font-black hover:bg-black transition-all"
+                    >
+                      첫 화면으로 돌아가기
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('scope')}
+                      className="w-full py-3.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl font-black hover:bg-indigo-100 transition-all"
+                    >
+                      시험 범위 입력하기
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <form onSubmit={handleTeacherSubmit} className="p-8 space-y-6">
@@ -1175,6 +1271,13 @@ export default function App() {
             <div className="w-full max-w-5xl animate-fade-in mt-4">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 px-2">
                 <div>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('home')}
+                    className="mb-3 text-xs font-black text-gray-500 hover:text-indigo-600 bg-white hover:bg-indigo-50 border border-gray-200 hover:border-indigo-200 px-3 py-2 rounded-xl transition-all shadow-sm"
+                  >
+                    ← 첫 화면으로
+                  </button>
                   <h2 className="text-2xl font-black text-gray-800 flex items-center gap-2"><CalendarDays className="text-indigo-600"/> 시험 범위 입력</h2>
                   <p className="text-gray-500 text-sm font-medium mt-1">본인이 담당하는 과목의 [입력/수정] 버튼을 눌러 시험 범위를 작성해주세요.</p>
                 </div>
