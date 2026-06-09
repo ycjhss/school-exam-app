@@ -90,12 +90,10 @@ const formatExamOption = (opt) => {
   return `${displayY}년 ${displayS}학기 ${displayE}`;
 };
 
-// 💡 시험 범위 고유 ID 생성 함수 (연도, 학기, 고사명, 일자, 학년, 교시, 과목 조합)
 const getScopeId = (vYear, vSem, vExam, item) => {
   return `${vYear}_${vSem}_${vExam}_${item.date}_${item.grade}_${item.period}_${item.subject}`.replace(/\s/g, '');
 };
 
-// 💡 오류 수정: 전달값(props)에 resetTrigger가 누락되어 있던 것을 복구했습니다.
 const SignaturePad = ({ onSave, resetTrigger }) => {
   const canvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -197,7 +195,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [viewMode, setViewMode] = useState('teacher'); 
-  const [statusTab, setStatusTab] = useState('signature'); // 💡 현황판 내 탭 (signature, scope)
+  const [statusTab, setStatusTab] = useState('signature');
   
   const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
@@ -214,7 +212,7 @@ export default function App() {
       { name: '한국사1', teachers: ['강감찬'] }
     ],
     checklist: defaultChecklistData,
-    examSchedule: [] // 💡 시험 시간표 기본틀 보관
+    examSchedule: []
   };
 
   const [globalSettings, setGlobalSettings] = useState(defaultGlobalSettings);
@@ -230,7 +228,7 @@ export default function App() {
   const [resetSigCounter, setResetSigCounter] = useState(0);
 
   // Scope Input State
-  const [examScopes, setExamScopes] = useState([]); // 💡 전체 시험 범위 데이터
+  const [examScopes, setExamScopes] = useState([]);
   const [selectedScheduleItem, setSelectedScheduleItem] = useState(null);
   const [scopeInputText, setScopeInputText] = useState('');
   const [scopeInputTeacher, setScopeInputTeacher] = useState('');
@@ -241,7 +239,7 @@ export default function App() {
   const [newTeachers, setNewTeachers] = useState({}); 
   const [adminMessage, setAdminMessage] = useState({ type: '', text: '' });
   const [bulkInput, setBulkInput] = useState(''); 
-  const [scheduleBulkInput, setScheduleBulkInput] = useState(''); // 💡 시간표 대량 입력
+  const [scheduleBulkInput, setScheduleBulkInput] = useState('');
   const [allSignatures, setAllSignatures] = useState([]); 
   const [printStatuses, setPrintStatuses] = useState([]); 
   const [newChecklistType, setNewChecklistType] = useState('item1');
@@ -301,7 +299,6 @@ export default function App() {
         setPrintStatuses(records);
       }
     );
-    // 💡 시험 범위 데이터 실시간 수신
     const unsubScopes = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'examScopes'), 
       (snap) => {
         const scopes = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -360,18 +357,13 @@ export default function App() {
     }
   };
 
-  // 💡 시험 범위 저장 (선생님 입력)
   const handleScopeSubmit = async (e) => {
     e.preventDefault();
-
-    // 시험 범위 내용은 비워둘 수 있게 하고, 작성자 이름만 필수로 유지
     if (!selectedScheduleItem || !scopeInputTeacher.trim()) {
       alert("성함을 입력해주세요.");
       return;
     }
-
     setIsSaving(true);
-
     try {
       const vYear = String(globalSettings.year);
       const vSem = String(globalSettings.semester);
@@ -379,27 +371,17 @@ export default function App() {
       const docId = getScopeId(vYear, vSem, vExam, selectedScheduleItem);
       
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examScopes', docId), {
-        year: vYear,
-        semester: vSem,
-        examName: vExam,
-        date: selectedScheduleItem.date,
-        grade: selectedScheduleItem.grade,
-        period: selectedScheduleItem.period,
-        subject: selectedScheduleItem.subject,
-        // 빈 문자열도 그대로 저장되도록 함
-        scopeText: scopeInputText,
-        teacherName: scopeInputTeacher.trim(),
+        year: vYear, semester: vSem, examName: vExam,
+        date: selectedScheduleItem.date, grade: selectedScheduleItem.grade,
+        period: selectedScheduleItem.period, subject: selectedScheduleItem.subject,
+        scopeText: scopeInputText, teacherName: scopeInputTeacher.trim(),
         updatedAt: serverTimestamp()
       });
-
-      setSelectedScheduleItem(null);
-      setScopeInputText('');
-      setScopeInputTeacher('');
+      setSelectedScheduleItem(null); setScopeInputText(''); setScopeInputTeacher('');
     } catch (err) {
       console.error(err);
       alert("저장 중 오류가 발생했습니다.");
     }
-
     setIsSaving(false);
   };
 
@@ -426,12 +408,10 @@ export default function App() {
       for (const p of printsToDelete) {
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'printStatuses', p.id));
       }
-      // 시험 범위도 삭제
       const scopesToDelete = examScopes.filter(s => String(s.year) === dYear && String(s.semester) === dSem && String(s.examName) === dExam);
       for (const sc of scopesToDelete) {
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examScopes', sc.id));
       }
-
       setDeleteExamKey(null);
       setAdminMessage({ type: 'success', text: `과거 기록이 영구 삭제되었습니다.` });
       setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000);
@@ -462,7 +442,6 @@ export default function App() {
     setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000);
   };
 
-  // 💡 시간표 대량 붙여넣기 로직
   const handleScheduleBulkPaste = () => {
     if(!scheduleBulkInput.trim()) return;
     const lines = scheduleBulkInput.split('\n');
@@ -487,7 +466,6 @@ export default function App() {
     setAdminData(prev => ({ ...prev, examSchedule: (prev.examSchedule || []).filter(item => item.id !== id) }));
   };
 
-  // 공통 변수들
   const allExamKeys = new Set([...allSignatures, ...examScopes].map(s => `${s.year}|${s.semester}|${s.examName}`));
   allExamKeys.add(`${globalSettings.year || '2026'}|${globalSettings.semester || '1'}|${globalSettings.examName || '1차 정기시험'}`);
   const examOptions = Array.from(allExamKeys).sort((a,b) => b.localeCompare(a)); 
@@ -535,9 +513,7 @@ export default function App() {
     document.body.removeChild(link);
   };
 
-  // 💡 오류 수정: 엑셀 다운로드 함수가 외부로 정상 분리되었습니다.
   const handleExportScopeCSV = () => {
-    // 엑셀에서 쉼표, 줄바꿈, 따옴표가 깨지지 않도록 처리
     const escapeCSV = (value) => {
       if (value === null || value === undefined) return '';
       const str = String(value);
@@ -551,10 +527,7 @@ export default function App() {
       const scopeDoc = viewingScopes.find(s => s.id === scopeId);
 
       const row = [
-        item.date,
-        item.grade,
-        item.period,
-        item.subject,
+        item.date, item.grade, item.period, item.subject,
         scopeDoc ? (scopeDoc.scopeText || '') : '',
         scopeDoc ? (scopeDoc.teacherName || '') : '',
         scopeDoc ? getDisplayDate(scopeDoc) : ''
@@ -573,7 +546,6 @@ export default function App() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-
     URL.revokeObjectURL(url);
   };
 
@@ -629,7 +601,6 @@ export default function App() {
     }));
   };
 
-  // 💡 시험 범위 테이블 렌더링 함수 (입력용 & 인쇄용 공용)
   const renderScheduleTable = (isPrintView = false) => {
     if (scheduleToDisplay.length === 0) {
       return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">등록된 시험 시간표가 없습니다. 관리자 설정에서 엑셀을 붙여넣어주세요.</div>;
@@ -727,7 +698,7 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-100 selection:bg-blue-100 font-sans">
       
-      {/* 💡 서명 및 공문서 통합/개별 확인용 팝업 */}
+      {/* 💡 1. 서명 및 공문서 통합/개별 확인용 팝업 (단 1개만 렌더링) */}
       {selectedSubmission && selectedSubmission.length > 0 && (() => {
         const baseSub = selectedSubmission[0]; 
         
@@ -771,7 +742,6 @@ export default function App() {
                   <p className="text-lg font-bold mb-6">위 항목을 모두 확인하고 이상 없음을 확인합니다.</p>
                   <p className="text-xl font-bold tracking-widest mb-10">{globalSettings.documentDate}</p>
                   
-                  {/* 서명 영역 세로 정렬 및 위치 최적화 */}
                   <div className="flex flex-col items-end text-xl font-bold pr-4 gap-y-6 mt-4">
                     {selectedSubmission.map((sub, idx) => (
                       <div key={idx} className="flex items-center">
@@ -806,9 +776,9 @@ export default function App() {
         );
       })()}
 
-      {/* 시험 범위 입력 모달 */}
+      {/* 💡 2. 시험 범위 입력 모달 (단 1개만 렌더링) */}
       {selectedScheduleItem && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-fade-in" onClick={() => setSelectedScheduleItem(null)}>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-fade-in print:hidden" onClick={() => setSelectedScheduleItem(null)}>
           <div className="bg-white p-8 rounded-[2rem] max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-6 border-b border-gray-100 pb-4">
               <h2 className="text-xl font-black text-gray-800 flex items-center gap-2">
@@ -851,7 +821,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 전체 메인 레이아웃 */}
+      {/* 💡 3. 전체 메인 레이아웃 (팝업이 열려있으면 인쇄 시 숨김) */}
       <div className={`${selectedSubmission || selectedScheduleItem ? 'print:hidden' : ''} flex flex-col flex-1`}>
         <header className="bg-white/90 backdrop-blur-md sticky top-0 z-10 border-b border-gray-200 px-3 sm:px-6 py-3 flex justify-between items-center shadow-sm print:hidden">
           <div className="flex items-center gap-2 sm:gap-3">
@@ -878,7 +848,7 @@ export default function App() {
 
         <main className="flex-1 flex flex-col items-center justify-start p-4 md:p-8 animate-fade-in relative z-0 print:p-0">
           
-          {/* 1. 교사 서명 화면 */}
+          {/* 3-1. 교사 서명 화면 */}
           {viewMode === 'teacher' && (
             <div className="w-full max-w-md bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] overflow-hidden border border-white relative mt-4">
               <div className="bg-gradient-to-br from-blue-600 to-blue-800 text-white p-8 text-center relative overflow-hidden">
@@ -995,7 +965,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 2. 시험 범위 입력 화면 (선생님용) */}
+          {/* 3-2. 시험 범위 입력 화면 (선생님용) */}
           {viewMode === 'scope' && (
             <div className="w-full max-w-5xl animate-fade-in mt-4">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 px-2">
@@ -1008,7 +978,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 3. 제출 현황 (비밀번호 없음) - 서명 현황 / 시험 범위 현황 통합 */}
+          {/* 3-3. 제출 현황 (비밀번호 없음) - 서명 현황 / 시험 범위 현황 통합 */}
           {viewMode === 'status' && (
             <div className="w-full max-w-5xl bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-6 md:p-10 animate-fade-in mt-4 print:shadow-none print:p-0 print:mt-0 print:border-none print:bg-transparent">
               
@@ -1074,7 +1044,7 @@ export default function App() {
               {/* 💡 서명 현황 탭 내용 */}
               {statusTab === 'signature' && (
                 <div className="animate-fade-in print:block">
-                  <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4">
+                  <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
                     [출제 검토 서명 현황] {formatExamOption(viewingExamKey || `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`)}
                   </div>
 
@@ -1180,7 +1150,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 4. 관리자 설정 화면 (비밀번호 확인 필요) */}
+          {/* 3-4. 관리자 설정 화면 (비밀번호 확인 필요) */}
           {viewMode === 'admin' && !isAdminUnlocked && (
             <div className="w-full max-w-sm bg-white rounded-[2rem] shadow-xl p-8 mt-12 animate-fade-in text-center border border-gray-100 print:hidden">
               <div className="bg-blue-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
