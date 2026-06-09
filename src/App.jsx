@@ -25,6 +25,155 @@ const db = getFirestore(app);
 
 const appId = "school-exam-final-v2";
 
+const printStyles = `
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  @media print {
+    html,
+    body,
+    #root {
+      width: auto !important;
+      min-height: auto !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      background: #ffffff !important;
+      overflow: visible !important;
+    }
+
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      text-shadow: none !important;
+    }
+
+    .print-document-modal {
+      position: static !important;
+      inset: auto !important;
+      display: block !important;
+      width: 100% !important;
+      min-height: auto !important;
+      height: auto !important;
+      max-height: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: visible !important;
+      background: #ffffff !important;
+    }
+
+    .print-document-sheet {
+      width: 100% !important;
+      max-width: none !important;
+      min-height: auto !important;
+      height: auto !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      overflow: visible !important;
+    }
+
+    .print-document-content {
+      width: 100% !important;
+      max-width: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: visible !important;
+      color: #000000 !important;
+    }
+
+    .print-document-content h2 {
+      margin: 0 0 18px 0 !important;
+      font-size: 20pt !important;
+      line-height: 1.2 !important;
+      letter-spacing: 0.12em !important;
+    }
+
+    .print-document-content p {
+      font-size: 11pt !important;
+      line-height: 1.5 !important;
+    }
+
+    .print-document-content table {
+      width: 100% !important;
+      table-layout: fixed !important;
+      border-collapse: collapse !important;
+      margin-bottom: 22px !important;
+      page-break-inside: auto !important;
+    }
+
+    .print-document-content thead {
+      display: table-header-group !important;
+    }
+
+    .print-document-content tr {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+
+    .print-document-content th {
+      padding: 6px 8px !important;
+      font-size: 10.5pt !important;
+      line-height: 1.25 !important;
+      background: #f3f4f6 !important;
+    }
+
+    .print-document-content td {
+      padding: 5px 8px !important;
+      font-size: 10pt !important;
+      line-height: 1.35 !important;
+    }
+
+    .print-document-content td:last-child,
+    .print-document-content th:last-child {
+      width: 22mm !important;
+    }
+
+    .print-signature-area {
+      margin-top: 24px !important;
+    }
+
+    .print-signature-area p {
+      margin-bottom: 12px !important;
+    }
+
+    .print-signature-list {
+      gap: 10px !important;
+      padding-right: 0 !important;
+      font-size: 12pt !important;
+    }
+
+    .print-signature-row {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+
+    .print-status-page {
+      width: 100% !important;
+      max-width: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: 0 !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      background: #ffffff !important;
+      overflow: visible !important;
+    }
+
+    .print-status-page table {
+      page-break-inside: auto !important;
+    }
+
+    .print-status-page tr,
+    .print-status-page .print\\:break-inside-avoid {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+  }
+`;
+
 const defaultChecklistData = [
   { id: 1, type: 'category', text: '1. 시험 문제 출제 원칙' },
   { id: 2, type: 'item1', text: '가. 교육 과정에 근거한 출제', status: 'O' },
@@ -697,16 +846,17 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-100 selection:bg-blue-100 font-sans">
+      <style>{printStyles}</style>
       
       {/* 💡 1. 서명 및 공문서 통합/개별 확인용 팝업 (단 1개만 렌더링) */}
       {selectedSubmission && selectedSubmission.length > 0 && (() => {
         const baseSub = selectedSubmission[0]; 
         
         return (
-          <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 md:p-8 print:static print:block print:bg-white print:p-0 animate-fade-in overflow-y-auto" onClick={() => setSelectedSubmission(null)}>
-            <div className="bg-white p-10 md:p-14 rounded-none md:rounded-[2rem] max-w-4xl w-full shadow-2xl print:shadow-none print:max-w-none print:w-full print:p-0 my-auto" onClick={e => e.stopPropagation()}>
+          <div className="print-document-modal fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 md:p-8 print:static print:block print:bg-white print:p-0 animate-fade-in overflow-y-auto" onClick={() => setSelectedSubmission(null)}>
+            <div className="print-document-sheet bg-white p-10 md:p-14 rounded-none md:rounded-[2rem] max-w-4xl w-full shadow-2xl print:shadow-none print:max-w-none print:w-full print:p-0 my-auto" onClick={e => e.stopPropagation()}>
               
-              <div className="print:text-black">
+              <div className="print-document-content print:text-black">
                 <h2 className="text-3xl font-black text-center mb-8 tracking-[0.2em]">지필평가 출제 검토 확인서</h2>
                 <p className="text-lg font-bold leading-relaxed mb-4 text-justify">
                   본인은 {baseSub.year === 'undefined' ? '?' : baseSub.year}년 {baseSub.semester === 'undefined' ? '?' : baseSub.semester}학기 {baseSub.examName === 'undefined' ? '' : baseSub.examName} {baseSub.subject}과 시험문제를 출제함에 있어 아래 표와 같은 내용을 검토하였음을 확인합니다.
@@ -738,13 +888,13 @@ export default function App() {
                   </tbody>
                 </table>
 
-                <div className="text-center mt-12 print:mt-16">
+                <div className="print-signature-area text-center mt-12 print:mt-16">
                   <p className="text-lg font-bold mb-6">위 항목을 모두 확인하고 이상 없음을 확인합니다.</p>
                   <p className="text-xl font-bold tracking-widest mb-10">{globalSettings.documentDate}</p>
                   
-                  <div className="flex flex-col items-end text-xl font-bold pr-4 gap-y-6 mt-4">
+                  <div className="print-signature-list flex flex-col items-end text-xl font-bold pr-4 gap-y-6 mt-4">
                     {selectedSubmission.map((sub, idx) => (
-                      <div key={idx} className="flex items-center">
+                      <div key={idx} className="print-signature-row flex items-center">
                         <span className={`mr-8 ${idx === 0 ? '' : 'invisible'}`}>확인 직위: 교사</span>
                         <span className="mr-2 w-32 text-right">성명: {sub.teacherName}</span>
                         <div className="relative inline-flex items-center justify-center w-28 h-12 ml-2">
@@ -980,7 +1130,7 @@ export default function App() {
 
           {/* 3-3. 제출 현황 (비밀번호 없음) - 서명 현황 / 시험 범위 현황 통합 */}
           {viewMode === 'status' && (
-            <div className="w-full max-w-5xl bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-6 md:p-10 animate-fade-in mt-4 print:shadow-none print:p-0 print:mt-0 print:border-none print:bg-transparent">
+            <div className="print-status-page w-full max-w-5xl bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-6 md:p-10 animate-fade-in mt-4 print:shadow-none print:p-0 print:mt-0 print:border-none print:bg-transparent">
               
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 border-b border-gray-100 pb-6 print:hidden">
                 <div className="flex flex-col gap-4 w-full md:w-auto">
