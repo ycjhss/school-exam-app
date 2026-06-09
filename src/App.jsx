@@ -28,17 +28,28 @@ const appId = "school-exam-final-v2";
 const printStyles = `
   @page {
     size: A4 portrait;
-    margin: 12mm;
+    margin: 0;
   }
 
   @media print {
     html,
     body,
     #root {
-      width: auto !important;
+      width: 210mm !important;
       min-height: auto !important;
       margin: 0 !important;
       padding: 0 !important;
+      background: #ffffff !important;
+      overflow: visible !important;
+    }
+
+    .app-root {
+      width: 210mm !important;
+      min-height: auto !important;
+      height: auto !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      display: block !important;
       background: #ffffff !important;
       overflow: visible !important;
     }
@@ -47,14 +58,15 @@ const printStyles = `
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
       text-shadow: none !important;
+      box-shadow: none !important;
     }
 
     .print-document-modal {
       position: static !important;
       inset: auto !important;
       display: block !important;
-      width: 100% !important;
-      min-height: auto !important;
+      width: 210mm !important;
+      min-height: 297mm !important;
       height: auto !important;
       max-height: none !important;
       margin: 0 !important;
@@ -64,15 +76,17 @@ const printStyles = `
     }
 
     .print-document-sheet {
-      width: 100% !important;
+      width: 210mm !important;
       max-width: none !important;
-      min-height: auto !important;
+      min-height: 297mm !important;
       height: auto !important;
       margin: 0 !important;
-      padding: 0 !important;
+      padding: 12mm 12mm 10mm 12mm !important;
+      box-sizing: border-box !important;
       border-radius: 0 !important;
       box-shadow: none !important;
       overflow: visible !important;
+      background: #ffffff !important;
     }
 
     .print-document-content {
@@ -82,26 +96,29 @@ const printStyles = `
       padding: 0 !important;
       overflow: visible !important;
       color: #000000 !important;
+      background: #ffffff !important;
     }
 
     .print-document-content h2 {
-      margin: 0 0 18px 0 !important;
-      font-size: 20pt !important;
-      line-height: 1.2 !important;
-      letter-spacing: 0.12em !important;
+      margin: 0 0 7mm 0 !important;
+      font-size: 19pt !important;
+      line-height: 1.15 !important;
+      letter-spacing: 0.08em !important;
     }
 
     .print-document-content p {
-      font-size: 11pt !important;
-      line-height: 1.5 !important;
+      margin: 0 0 4mm 0 !important;
+      font-size: 10.5pt !important;
+      line-height: 1.45 !important;
     }
 
     .print-document-content table {
       width: 100% !important;
       table-layout: fixed !important;
       border-collapse: collapse !important;
-      margin-bottom: 22px !important;
-      page-break-inside: auto !important;
+      margin: 0 0 8mm 0 !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
     }
 
     .print-document-content thead {
@@ -114,16 +131,16 @@ const printStyles = `
     }
 
     .print-document-content th {
-      padding: 6px 8px !important;
-      font-size: 10.5pt !important;
-      line-height: 1.25 !important;
+      padding: 4px 6px !important;
+      font-size: 10pt !important;
+      line-height: 1.2 !important;
       background: #f3f4f6 !important;
     }
 
     .print-document-content td {
-      padding: 5px 8px !important;
-      font-size: 10pt !important;
-      line-height: 1.35 !important;
+      padding: 3.5px 6px !important;
+      font-size: 9.5pt !important;
+      line-height: 1.25 !important;
     }
 
     .print-document-content td:last-child,
@@ -132,29 +149,44 @@ const printStyles = `
     }
 
     .print-signature-area {
-      margin-top: 24px !important;
+      margin-top: 6mm !important;
+      background: #ffffff !important;
     }
 
     .print-signature-area p {
-      margin-bottom: 12px !important;
+      margin: 0 0 5mm 0 !important;
+      font-size: 11pt !important;
+      line-height: 1.35 !important;
     }
 
     .print-signature-list {
-      gap: 10px !important;
+      gap: 4mm !important;
       padding-right: 0 !important;
+      margin-top: 2mm !important;
       font-size: 12pt !important;
+      background: #ffffff !important;
     }
 
     .print-signature-row {
       page-break-inside: avoid !important;
       break-inside: avoid !important;
+      min-height: 13mm !important;
+    }
+
+    .print-signature-row img {
+      height: 15mm !important;
+      width: 38mm !important;
+      max-width: none !important;
+      object-fit: contain !important;
     }
 
     .print-status-page {
-      width: 100% !important;
+      width: 210mm !important;
       max-width: none !important;
+      min-height: 297mm !important;
       margin: 0 !important;
-      padding: 0 !important;
+      padding: 12mm !important;
+      box-sizing: border-box !important;
       border: 0 !important;
       border-radius: 0 !important;
       box-shadow: none !important;
@@ -845,7 +877,7 @@ export default function App() {
   const existingSigForSelectedTeacher = subjectSignaturesForTeacherView.find(s => s.teacherName === selectedTeacher);
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-100 selection:bg-blue-100 font-sans">
+    <div className="app-root min-h-screen flex flex-col bg-gray-100 selection:bg-blue-100 font-sans">
       <style>{printStyles}</style>
       
       {/* 💡 1. 서명 및 공문서 통합/개별 확인용 팝업 (단 1개만 렌더링) */}
