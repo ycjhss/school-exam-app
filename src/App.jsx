@@ -25,210 +25,6 @@ const db = getFirestore(app);
 
 const appId = "school-exam-final-v2";
 
-const printStyles = `
-  @page {
-    size: A4 portrait;
-    margin: 0;
-  }
-
-  @media print {
-    html,
-    body,
-    #root {
-      width: 210mm !important;
-      min-height: auto !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      background: #ffffff !important;
-      overflow: visible !important;
-    }
-
-    .app-root {
-      width: 210mm !important;
-      min-height: auto !important;
-      height: auto !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      display: block !important;
-      background: #ffffff !important;
-      overflow: visible !important;
-    }
-
-    * {
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-      text-shadow: none !important;
-      box-shadow: none !important;
-    }
-
-    .print-document-modal {
-      position: static !important;
-      inset: auto !important;
-      display: block !important;
-      width: 210mm !important;
-      min-height: 297mm !important;
-      height: auto !important;
-      max-height: none !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      overflow: visible !important;
-      background: #ffffff !important;
-    }
-
-    .print-document-sheet {
-      width: 210mm !important;
-      max-width: none !important;
-      min-height: 297mm !important;
-      height: auto !important;
-      margin: 0 !important;
-      padding: 11mm 12mm 9mm 12mm !important;
-      box-sizing: border-box !important;
-      border-radius: 0 !important;
-      box-shadow: none !important;
-      overflow: visible !important;
-      background: #ffffff !important;
-    }
-
-    .print-document-content {
-      width: 100% !important;
-      max-width: none !important;
-      min-height: 277mm !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      overflow: visible !important;
-      color: #000000 !important;
-      background: #ffffff !important;
-      display: flex !important;
-      flex-direction: column !important;
-    }
-
-    .print-document-content h2 {
-      margin: 0 0 6mm 0 !important;
-      font-size: 19pt !important;
-      line-height: 1.15 !important;
-      letter-spacing: 0.08em !important;
-    }
-
-    .print-document-content p {
-      margin: 0 0 5mm 0 !important;
-      font-size: 10.5pt !important;
-      line-height: 1.45 !important;
-    }
-
-    .print-document-content table {
-      width: 100% !important;
-      table-layout: fixed !important;
-      border-collapse: collapse !important;
-      margin: 0 0 10mm 0 !important;
-      page-break-inside: avoid !important;
-      break-inside: avoid !important;
-    }
-
-    .print-document-content thead {
-      display: table-header-group !important;
-    }
-
-    .print-document-content tr {
-      page-break-inside: avoid !important;
-      break-inside: avoid !important;
-    }
-
-    .print-document-content th {
-      padding: 3.6mm 2.5mm !important;
-      font-size: 12pt !important;
-      line-height: 1.28 !important;
-      background: #f3f4f6 !important;
-    }
-
-    .print-document-content td {
-      padding: 3.15mm 2.5mm !important;
-      font-size: 11.7pt !important;
-      line-height: 1.35 !important;
-    }
-
-    .print-document-content td:last-child,
-    .print-document-content th:last-child {
-      width: 24mm !important;
-    }
-
-    .print-signature-area {
-      flex: 0 0 auto !important;
-      min-height: 0 !important;
-      margin-top: 2mm !important;
-      background: #ffffff !important;
-      display: flex !important;
-      flex-direction: column !important;
-    }
-
-    .print-signature-area p {
-      margin: 0 0 5mm 0 !important;
-      font-size: 11pt !important;
-      line-height: 1.35 !important;
-    }
-
-    .print-signature-area p:first-child {
-      margin-top: 2mm !important;
-    }
-
-    .print-signature-list {
-      flex: 0 0 auto !important;
-      width: 100% !important;
-      padding-right: 0 !important;
-      margin-top: 3mm !important;
-      margin-bottom: 0 !important;
-      font-size: 12pt !important;
-      background: #ffffff !important;
-      display: flex !important;
-      flex-direction: column !important;
-      justify-content: flex-start !important;
-      gap: 5mm !important;
-    }
-
-    .print-signature-list.signature-count-1 {
-      flex: 0 0 auto !important;
-      justify-content: flex-start !important;
-      gap: 5mm !important;
-    }
-
-    .print-signature-row {
-      page-break-inside: avoid !important;
-      break-inside: avoid !important;
-      min-height: 13mm !important;
-    }
-
-    .print-signature-row img {
-      height: 14mm !important;
-      width: 38mm !important;
-      max-width: none !important;
-      object-fit: contain !important;
-    }
-
-    .print-status-page {
-      width: 210mm !important;
-      max-width: none !important;
-      min-height: 297mm !important;
-      margin: 0 !important;
-      padding: 12mm !important;
-      box-sizing: border-box !important;
-      border: 0 !important;
-      border-radius: 0 !important;
-      box-shadow: none !important;
-      background: #ffffff !important;
-      overflow: visible !important;
-    }
-
-    .print-status-page table {
-      page-break-inside: auto !important;
-    }
-
-    .print-status-page tr,
-    .print-status-page .print\\:break-inside-avoid {
-      page-break-inside: avoid !important;
-      break-inside: avoid !important;
-    }
-  }
-`;
-
 const defaultChecklistData = [
   { id: 1, type: 'category', text: '1. 시험 문제 출제 원칙' },
   { id: 2, type: 'item1', text: '가. 교육 과정에 근거한 출제', status: 'O' },
@@ -294,10 +90,12 @@ const formatExamOption = (opt) => {
   return `${displayY}년 ${displayS}학기 ${displayE}`;
 };
 
+// 💡 시험 범위 고유 ID 생성 함수 (연도, 학기, 고사명, 일자, 학년, 교시, 과목 조합)
 const getScopeId = (vYear, vSem, vExam, item) => {
   return `${vYear}_${vSem}_${vExam}_${item.date}_${item.grade}_${item.period}_${item.subject}`.replace(/\s/g, '');
 };
 
+// 💡 오류 수정: 전달값(props)에 resetTrigger가 누락되어 있던 것을 복구했습니다.
 const SignaturePad = ({ onSave, resetTrigger }) => {
   const canvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -398,8 +196,8 @@ const SignaturePad = ({ onSave, resetTrigger }) => {
 export default function App() {
   const [user, setUser] = useState(null);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
-  const [viewMode, setViewMode] = useState('home'); 
-  const [statusTab, setStatusTab] = useState('signature');
+  const [viewMode, setViewMode] = useState('teacher'); 
+  const [statusTab, setStatusTab] = useState('signature'); // 💡 현황판 내 탭 (signature, scope)
   
   const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
@@ -416,7 +214,7 @@ export default function App() {
       { name: '한국사1', teachers: ['강감찬'] }
     ],
     checklist: defaultChecklistData,
-    examSchedule: []
+    examSchedule: [] // 💡 시험 시간표 기본틀 보관
   };
 
   const [globalSettings, setGlobalSettings] = useState(defaultGlobalSettings);
@@ -432,7 +230,7 @@ export default function App() {
   const [resetSigCounter, setResetSigCounter] = useState(0);
 
   // Scope Input State
-  const [examScopes, setExamScopes] = useState([]);
+  const [examScopes, setExamScopes] = useState([]); // 💡 전체 시험 범위 데이터
   const [selectedScheduleItem, setSelectedScheduleItem] = useState(null);
   const [scopeInputText, setScopeInputText] = useState('');
   const [scopeInputTeacher, setScopeInputTeacher] = useState('');
@@ -443,7 +241,7 @@ export default function App() {
   const [newTeachers, setNewTeachers] = useState({}); 
   const [adminMessage, setAdminMessage] = useState({ type: '', text: '' });
   const [bulkInput, setBulkInput] = useState(''); 
-  const [scheduleBulkInput, setScheduleBulkInput] = useState('');
+  const [scheduleBulkInput, setScheduleBulkInput] = useState(''); // 💡 시간표 대량 입력
   const [allSignatures, setAllSignatures] = useState([]); 
   const [printStatuses, setPrintStatuses] = useState([]); 
   const [newChecklistType, setNewChecklistType] = useState('item1');
@@ -503,6 +301,7 @@ export default function App() {
         setPrintStatuses(records);
       }
     );
+    // 💡 시험 범위 데이터 실시간 수신
     const unsubScopes = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'examScopes'), 
       (snap) => {
         const scopes = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -561,13 +360,18 @@ export default function App() {
     }
   };
 
+  // 💡 시험 범위 저장 (선생님 입력)
   const handleScopeSubmit = async (e) => {
     e.preventDefault();
+
+    // 시험 범위 내용은 비워둘 수 있게 하고, 작성자 이름만 필수로 유지
     if (!selectedScheduleItem || !scopeInputTeacher.trim()) {
       alert("성함을 입력해주세요.");
       return;
     }
+
     setIsSaving(true);
+
     try {
       const vYear = String(globalSettings.year);
       const vSem = String(globalSettings.semester);
@@ -575,17 +379,27 @@ export default function App() {
       const docId = getScopeId(vYear, vSem, vExam, selectedScheduleItem);
       
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examScopes', docId), {
-        year: vYear, semester: vSem, examName: vExam,
-        date: selectedScheduleItem.date, grade: selectedScheduleItem.grade,
-        period: selectedScheduleItem.period, subject: selectedScheduleItem.subject,
-        scopeText: scopeInputText, teacherName: scopeInputTeacher.trim(),
+        year: vYear,
+        semester: vSem,
+        examName: vExam,
+        date: selectedScheduleItem.date,
+        grade: selectedScheduleItem.grade,
+        period: selectedScheduleItem.period,
+        subject: selectedScheduleItem.subject,
+        // 빈 문자열도 그대로 저장되도록 함
+        scopeText: scopeInputText,
+        teacherName: scopeInputTeacher.trim(),
         updatedAt: serverTimestamp()
       });
-      setSelectedScheduleItem(null); setScopeInputText(''); setScopeInputTeacher('');
+
+      setSelectedScheduleItem(null);
+      setScopeInputText('');
+      setScopeInputTeacher('');
     } catch (err) {
       console.error(err);
       alert("저장 중 오류가 발생했습니다.");
     }
+
     setIsSaving(false);
   };
 
@@ -612,10 +426,12 @@ export default function App() {
       for (const p of printsToDelete) {
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'printStatuses', p.id));
       }
+      // 시험 범위도 삭제
       const scopesToDelete = examScopes.filter(s => String(s.year) === dYear && String(s.semester) === dSem && String(s.examName) === dExam);
       for (const sc of scopesToDelete) {
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examScopes', sc.id));
       }
+
       setDeleteExamKey(null);
       setAdminMessage({ type: 'success', text: `과거 기록이 영구 삭제되었습니다.` });
       setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000);
@@ -646,6 +462,7 @@ export default function App() {
     setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000);
   };
 
+  // 💡 시간표 대량 붙여넣기 로직
   const handleScheduleBulkPaste = () => {
     if(!scheduleBulkInput.trim()) return;
     const lines = scheduleBulkInput.split('\n');
@@ -670,6 +487,7 @@ export default function App() {
     setAdminData(prev => ({ ...prev, examSchedule: (prev.examSchedule || []).filter(item => item.id !== id) }));
   };
 
+  // 공통 변수들
   const allExamKeys = new Set([...allSignatures, ...examScopes].map(s => `${s.year}|${s.semester}|${s.examName}`));
   allExamKeys.add(`${globalSettings.year || '2026'}|${globalSettings.semester || '1'}|${globalSettings.examName || '1차 정기시험'}`);
   const examOptions = Array.from(allExamKeys).sort((a,b) => b.localeCompare(a)); 
@@ -717,7 +535,9 @@ export default function App() {
     document.body.removeChild(link);
   };
 
+  // 💡 오류 수정: 엑셀 다운로드 함수가 외부로 정상 분리되었습니다.
   const handleExportScopeCSV = () => {
+    // 엑셀에서 쉼표, 줄바꿈, 따옴표가 깨지지 않도록 처리
     const escapeCSV = (value) => {
       if (value === null || value === undefined) return '';
       const str = String(value);
@@ -731,7 +551,10 @@ export default function App() {
       const scopeDoc = viewingScopes.find(s => s.id === scopeId);
 
       const row = [
-        item.date, item.grade, item.period, item.subject,
+        item.date,
+        item.grade,
+        item.period,
+        item.subject,
         scopeDoc ? (scopeDoc.scopeText || '') : '',
         scopeDoc ? (scopeDoc.teacherName || '') : '',
         scopeDoc ? getDisplayDate(scopeDoc) : ''
@@ -750,6 +573,7 @@ export default function App() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+
     URL.revokeObjectURL(url);
   };
 
@@ -805,6 +629,7 @@ export default function App() {
     }));
   };
 
+  // 💡 시험 범위 테이블 렌더링 함수 (입력용 & 인쇄용 공용)
   const renderScheduleTable = (isPrintView = false) => {
     if (scheduleToDisplay.length === 0) {
       return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">등록된 시험 시간표가 없습니다. 관리자 설정에서 엑셀을 붙여넣어주세요.</div>;
@@ -900,18 +725,17 @@ export default function App() {
   const existingSigForSelectedTeacher = subjectSignaturesForTeacherView.find(s => s.teacherName === selectedTeacher);
 
   return (
-    <div className="app-root min-h-screen flex flex-col bg-gray-100 selection:bg-blue-100 font-sans">
-      <style>{printStyles}</style>
+    <div className="min-h-screen flex flex-col bg-gray-100 selection:bg-blue-100 font-sans">
       
-      {/* 💡 1. 서명 및 공문서 통합/개별 확인용 팝업 (단 1개만 렌더링) */}
+      {/* 💡 서명 및 공문서 통합/개별 확인용 팝업 */}
       {selectedSubmission && selectedSubmission.length > 0 && (() => {
         const baseSub = selectedSubmission[0]; 
         
         return (
-          <div className="print-document-modal fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 md:p-8 print:static print:block print:bg-white print:p-0 animate-fade-in overflow-y-auto" onClick={() => setSelectedSubmission(null)}>
-            <div className="print-document-sheet bg-white p-10 md:p-14 rounded-none md:rounded-[2rem] max-w-4xl w-full shadow-2xl print:shadow-none print:max-w-none print:w-full print:p-0 my-auto" onClick={e => e.stopPropagation()}>
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 md:p-8 print:static print:block print:bg-white print:p-0 animate-fade-in overflow-y-auto" onClick={() => setSelectedSubmission(null)}>
+            <div className="bg-white p-10 md:p-14 rounded-none md:rounded-[2rem] max-w-4xl w-full shadow-2xl print:shadow-none print:max-w-none print:w-full print:p-0 my-auto" onClick={e => e.stopPropagation()}>
               
-              <div className="print-document-content print:text-black">
+              <div className="print:text-black">
                 <h2 className="text-3xl font-black text-center mb-8 tracking-[0.2em]">지필평가 출제 검토 확인서</h2>
                 <p className="text-lg font-bold leading-relaxed mb-4 text-justify">
                   본인은 {baseSub.year === 'undefined' ? '?' : baseSub.year}년 {baseSub.semester === 'undefined' ? '?' : baseSub.semester}학기 {baseSub.examName === 'undefined' ? '' : baseSub.examName} {baseSub.subject}과 시험문제를 출제함에 있어 아래 표와 같은 내용을 검토하였음을 확인합니다.
@@ -943,13 +767,14 @@ export default function App() {
                   </tbody>
                 </table>
 
-                <div className="print-signature-area text-center mt-12 print:mt-16">
+                <div className="text-center mt-12 print:mt-16">
                   <p className="text-lg font-bold mb-6">위 항목을 모두 확인하고 이상 없음을 확인합니다.</p>
                   <p className="text-xl font-bold tracking-widest mb-10">{globalSettings.documentDate}</p>
                   
-                  <div className={`print-signature-list signature-count-${Math.min(selectedSubmission.length, 6)} flex flex-col items-end text-xl font-bold pr-4 gap-y-6 mt-4`}>
+                  {/* 서명 영역 세로 정렬 및 위치 최적화 */}
+                  <div className="flex flex-col items-end text-xl font-bold pr-4 gap-y-6 mt-4">
                     {selectedSubmission.map((sub, idx) => (
-                      <div key={idx} className="print-signature-row flex items-center">
+                      <div key={idx} className="flex items-center">
                         <span className={`mr-8 ${idx === 0 ? '' : 'invisible'}`}>확인 직위: 교사</span>
                         <span className="mr-2 w-32 text-right">성명: {sub.teacherName}</span>
                         <div className="relative inline-flex items-center justify-center w-28 h-12 ml-2">
@@ -981,9 +806,9 @@ export default function App() {
         );
       })()}
 
-      {/* 💡 2. 시험 범위 입력 모달 (단 1개만 렌더링) */}
+      {/* 시험 범위 입력 모달 */}
       {selectedScheduleItem && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-fade-in print:hidden" onClick={() => setSelectedScheduleItem(null)}>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-fade-in" onClick={() => setSelectedScheduleItem(null)}>
           <div className="bg-white p-8 rounded-[2rem] max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-6 border-b border-gray-100 pb-4">
               <h2 className="text-xl font-black text-gray-800 flex items-center gap-2">
@@ -1026,20 +851,15 @@ export default function App() {
         </div>
       )}
 
-      {/* 💡 3. 전체 메인 레이아웃 (팝업이 열려있으면 인쇄 시 숨김) */}
+      {/* 전체 메인 레이아웃 */}
       <div className={`${selectedSubmission || selectedScheduleItem ? 'print:hidden' : ''} flex flex-col flex-1`}>
         <header className="bg-white/90 backdrop-blur-md sticky top-0 z-10 border-b border-gray-200 px-3 sm:px-6 py-3 flex justify-between items-center shadow-sm print:hidden">
-          <button
-            type="button"
-            onClick={() => setViewMode('home')}
-            className="flex items-center gap-2 sm:gap-3 text-left hover:opacity-90 transition-opacity"
-            title="첫 화면으로 이동"
-          >
+          <div className="flex items-center gap-2 sm:gap-3">
             <div className="bg-blue-600 p-1.5 sm:p-2 rounded-xl shadow-lg shadow-blue-200">
               <FileText className="text-white w-4 h-4 sm:w-5 sm:h-5"/>
             </div>
             <h1 className="text-base sm:text-xl font-black text-gray-800 tracking-tight whitespace-nowrap">백송고 정기고사</h1>
-          </button>
+          </div>
           <div className="flex bg-gray-200/50 p-1 rounded-xl sm:rounded-2xl border border-gray-200 overflow-x-auto custom-scrollbar no-scrollbar">
             <button onClick={() => setViewMode('teacher')} className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all duration-200 whitespace-nowrap flex items-center gap-1 ${viewMode==='teacher'?'bg-white text-blue-600 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}>
               <Edit2 size={12}/>출제 서명
@@ -1058,85 +878,10 @@ export default function App() {
 
         <main className="flex-1 flex flex-col items-center justify-start p-4 md:p-8 animate-fade-in relative z-0 print:p-0">
           
-          {/* 3-0. 첫 화면: 교사용 업무 선택 */}
-          {viewMode === 'home' && (
-            <div className="w-full max-w-5xl animate-fade-in mt-6">
-              <div className="bg-white rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-6 md:p-10 mb-6 text-center">
-                <div className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2 rounded-full text-xs font-black mb-5 border border-blue-100">
-                  <FileText size={14}/> {String(globalSettings.year)}년 {String(globalSettings.semester)}학기 {String(globalSettings.examName)}
-                </div>
-                <h2 className="text-2xl md:text-4xl font-black text-gray-900 tracking-tight mb-3">처리할 업무를 선택해 주세요</h2>
-                <p className="text-gray-500 text-sm md:text-base font-medium leading-relaxed">
-                  출제 검토 확인서 서명과 시험 범위 입력을 각각 진행할 수 있습니다.<br className="hidden md:block" />
-                  두 항목을 모두 완료해야 정기고사 자료 제출이 마무리됩니다.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
-                <button
-                  type="button"
-                  onClick={() => setViewMode('teacher')}
-                  className="group bg-white rounded-[2rem] p-7 md:p-8 border-2 border-blue-100 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-blue-400 transition-all text-left overflow-hidden relative"
-                >
-                  <div className="absolute right-0 top-0 w-32 h-32 bg-blue-50 rounded-bl-full opacity-70 group-hover:bg-blue-100 transition-colors" />
-                  <div className="relative z-10">
-                    <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-100 mb-5">
-                      <Edit2 size={26}/>
-                    </div>
-                    <p className="text-xs font-black text-blue-600 tracking-[0.2em] mb-2">STEP 1</p>
-                    <h3 className="text-2xl font-black text-gray-900 mb-3">출제 검토 확인서</h3>
-                    <p className="text-sm text-gray-500 font-medium leading-relaxed mb-6">
-                      과목과 성함을 선택한 뒤 검토 항목을 확인하고 서명합니다.
-                    </p>
-                    <div className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-black text-center group-hover:bg-blue-700 transition-colors">
-                      확인서 서명하기
-                    </div>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setViewMode('scope')}
-                  className="group bg-white rounded-[2rem] p-7 md:p-8 border-2 border-indigo-100 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-indigo-400 transition-all text-left overflow-hidden relative"
-                >
-                  <div className="absolute right-0 top-0 w-32 h-32 bg-indigo-50 rounded-bl-full opacity-70 group-hover:bg-indigo-100 transition-colors" />
-                  <div className="relative z-10">
-                    <div className="w-14 h-14 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-100 mb-5">
-                      <CalendarDays size={26}/>
-                    </div>
-                    <p className="text-xs font-black text-indigo-600 tracking-[0.2em] mb-2">STEP 2</p>
-                    <h3 className="text-2xl font-black text-gray-900 mb-3">시험 범위 입력</h3>
-                    <p className="text-sm text-gray-500 font-medium leading-relaxed mb-6">
-                      담당 과목의 시험 범위를 입력하거나 이미 입력된 범위를 수정합니다.
-                    </p>
-                    <div className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-black text-center group-hover:bg-indigo-700 transition-colors">
-                      시험 범위 입력하기
-                    </div>
-                  </div>
-                </button>
-              </div>
-
-              <div className="mt-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 text-center">
-                <p className="text-sm font-bold text-amber-800">
-                  안내: 출제 검토 확인서만 제출하고 나가지 않도록, 서명 후에는 첫 화면으로 돌아와 시험 범위 입력까지 확인해 주세요.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* 3-1. 교사 서명 화면 */}
+          {/* 1. 교사 서명 화면 */}
           {viewMode === 'teacher' && (
             <div className="w-full max-w-md bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] overflow-hidden border border-white relative mt-4">
-              <div className="px-6 pt-5 pb-0 print:hidden">
-                <button
-                  type="button"
-                  onClick={() => setViewMode('home')}
-                  className="text-xs font-black text-gray-500 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-200 px-3 py-2 rounded-xl transition-all"
-                >
-                  ← 첫 화면으로
-                </button>
-              </div>
-              <div className="bg-gradient-to-br from-blue-600 to-blue-800 text-white p-8 text-center relative overflow-hidden mt-4">
+              <div className="bg-gradient-to-br from-blue-600 to-blue-800 text-white p-8 text-center relative overflow-hidden">
                 <h2 className="text-2xl font-black mb-2 relative z-10">출제 검토 확인서</h2>
                 <p className="text-blue-100 text-sm font-medium opacity-90 relative z-10">
                   {String(globalSettings.year)}년 {String(globalSettings.semester)}학기 {String(globalSettings.examName)}
@@ -1150,22 +895,6 @@ export default function App() {
                   </div>
                   <h3 className="text-2xl font-black text-gray-800">제출 완료!</h3>
                   <p className="text-gray-500 mt-3 text-sm font-medium">감사합니다. 문서가 클라우드에 영구 보존되었습니다.</p>
-                  <div className="mt-8 space-y-3">
-                    <button
-                      type="button"
-                      onClick={() => setViewMode('home')}
-                      className="w-full py-3.5 bg-gray-900 text-white rounded-xl font-black hover:bg-black transition-all"
-                    >
-                      첫 화면으로 돌아가기
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setViewMode('scope')}
-                      className="w-full py-3.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl font-black hover:bg-indigo-100 transition-all"
-                    >
-                      시험 범위 입력하기
-                    </button>
-                  </div>
                 </div>
               ) : (
                 <form onSubmit={handleTeacherSubmit} className="p-8 space-y-6">
@@ -1266,18 +995,11 @@ export default function App() {
             </div>
           )}
 
-          {/* 3-2. 시험 범위 입력 화면 (선생님용) */}
+          {/* 2. 시험 범위 입력 화면 (선생님용) */}
           {viewMode === 'scope' && (
             <div className="w-full max-w-5xl animate-fade-in mt-4">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 px-2">
                 <div>
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('home')}
-                    className="mb-3 text-xs font-black text-gray-500 hover:text-indigo-600 bg-white hover:bg-indigo-50 border border-gray-200 hover:border-indigo-200 px-3 py-2 rounded-xl transition-all shadow-sm"
-                  >
-                    ← 첫 화면으로
-                  </button>
                   <h2 className="text-2xl font-black text-gray-800 flex items-center gap-2"><CalendarDays className="text-indigo-600"/> 시험 범위 입력</h2>
                   <p className="text-gray-500 text-sm font-medium mt-1">본인이 담당하는 과목의 [입력/수정] 버튼을 눌러 시험 범위를 작성해주세요.</p>
                 </div>
@@ -1286,9 +1008,9 @@ export default function App() {
             </div>
           )}
 
-          {/* 3-3. 제출 현황 (비밀번호 없음) - 서명 현황 / 시험 범위 현황 통합 */}
+          {/* 3. 제출 현황 (비밀번호 없음) - 서명 현황 / 시험 범위 현황 통합 */}
           {viewMode === 'status' && (
-            <div className="print-status-page w-full max-w-5xl bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-6 md:p-10 animate-fade-in mt-4 print:shadow-none print:p-0 print:mt-0 print:border-none print:bg-transparent">
+            <div className="w-full max-w-5xl bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-6 md:p-10 animate-fade-in mt-4 print:shadow-none print:p-0 print:mt-0 print:border-none print:bg-transparent">
               
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 border-b border-gray-100 pb-6 print:hidden">
                 <div className="flex flex-col gap-4 w-full md:w-auto">
@@ -1352,7 +1074,7 @@ export default function App() {
               {/* 💡 서명 현황 탭 내용 */}
               {statusTab === 'signature' && (
                 <div className="animate-fade-in print:block">
-                  <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
+                  <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4">
                     [출제 검토 서명 현황] {formatExamOption(viewingExamKey || `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`)}
                   </div>
 
@@ -1458,7 +1180,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 3-4. 관리자 설정 화면 (비밀번호 확인 필요) */}
+          {/* 4. 관리자 설정 화면 (비밀번호 확인 필요) */}
           {viewMode === 'admin' && !isAdminUnlocked && (
             <div className="w-full max-w-sm bg-white rounded-[2rem] shadow-xl p-8 mt-12 animate-fade-in text-center border border-gray-100 print:hidden">
               <div className="bg-blue-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
