@@ -206,7 +206,6 @@ const SignaturePad = ({ onSave, resetTrigger }) => {
   );
 };
 
-// 💡 비율 관리를 위한 개별 컴포넌트 (스프레드시트 엑셀식 입력 처리)
 const RatioRow = ({ item, year, sem, grade, onSave, onDelete }) => {
   const [formData, setFormData] = useState(item);
   const [confirmName, setConfirmName] = useState(item.confirmedBy || '');
@@ -489,7 +488,7 @@ export default function App() {
     setIsSaving(false);
   };
 
-  // 💡 비율 데이터 필터 및 병합 로직 (2026-1 초기화 자동 반영)
+  // 비율 데이터 필터 및 병합 로직
   const currentRatios = assessmentRatios.filter(r => String(r.year) === String(ratioYear) && String(r.semester) === String(ratioSem));
   let displayRatios = [];
   if (String(ratioYear) === '2026' && String(ratioSem) === '1') {
@@ -529,13 +528,10 @@ export default function App() {
         updatedAt: serverTimestamp()
       };
       
-      // Remove metadata flags before saving
       delete finalData.isUnsavedDefault;
       delete finalData.id;
 
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assessmentRatios', docId), finalData);
-      
-      // If it was a new unsaved row from UI, remove it from local state
       setNewRatioRows(prev => prev.filter(r => r.id !== data.id));
       
       if (isConfirm) alert("확인 완료되었습니다.");
@@ -625,7 +621,12 @@ export default function App() {
     });
   };
 
-  const allExamKeys = new Set([...allSignatures, ...examScopes, ...examCutoffs].map(s => `${s.year}|${s.semester}|${s.examName}`));
+  const allExamKeys = new Set([
+    ...allSignatures.map(s => `${s.year}|${s.semester}|${s.examName}`),
+    ...examScopes.map(s => `${s.year}|${s.semester}|${s.examName}`),
+    ...examCutoffs.map(s => `${s.year}|${s.semester}|${s.examName}`),
+    ...assessmentRatios.map(s => `${s.year}|${s.semester}|${globalSettings.examName || '1차 정기시험'}`)
+  ]);
   allExamKeys.add(`${globalSettings.year || '2026'}|${globalSettings.semester || '1'}|${globalSettings.examName || '1차 정기시험'}`);
   const examOptions = Array.from(allExamKeys).sort((a,b) => b.localeCompare(a)); 
 
@@ -695,11 +696,22 @@ export default function App() {
     link.download = `추정분할점수표_${vYear}_${vSem}학기_${vExam}.csv`; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
   };
 
-  // 💡 제출 현황에서 선택된 연도/학기(vYear, vSem)를 기준으로 비율표 엑셀 다운로드
   const handleExportRatioCSV = () => {
     let csv = "\uFEFF학년,과목(학점),1차 정기시험,2차 정기시험,수행평가(1),수행평가(2),수행평가(3),수행평가(4),수행평가(5),논술형 비율(%),계,최종확인\n";
-    const exportRatios = assessmentRatios.filter(r => String(r.year) === String(vYear) && String(r.semester) === String(vSem));
-    
+    const currentStatusRatios = assessmentRatios.filter(r => String(r.year) === String(vYear) && String(r.semester) === String(vSem));
+    let exportRatios = [];
+    if (String(vYear) === '2026' && String(vSem) === '1') {
+      exportRatios = defaultAssessment2026S1.map(def => {
+        const found = currentStatusRatios.find(r => r.subject === def.subject && r.grade === def.grade);
+        return found ? found : { ...def, year: '2026', semester: '1' };
+      });
+      currentStatusRatios.forEach(r => {
+        if (!exportRatios.find(d => d.subject === r.subject && d.grade === r.grade)) exportRatios.push(r);
+      });
+    } else {
+      exportRatios = [...currentStatusRatios];
+    }
+
     [1, 2, 3].forEach(g => {
       const gradeRatios = exportRatios.filter(r => String(r.grade) === String(g));
       gradeRatios.forEach(r => {
@@ -824,18 +836,30 @@ export default function App() {
     );
   };
 
-  // 💡 비율 및 수행평가 읽기 전용 렌더링 (제출 현황/인쇄용)
   const renderReadOnlyRatioTable = () => {
     const currentStatusRatios = assessmentRatios.filter(r => String(r.year) === String(vYear) && String(r.semester) === String(vSem));
+    let displayStatusRatios = [];
 
-    if (currentStatusRatios.length === 0) {
+    if (String(vYear) === '2026' && String(vSem) === '1') {
+      displayStatusRatios = defaultAssessment2026S1.map(def => {
+        const found = currentStatusRatios.find(r => r.subject === def.subject && r.grade === def.grade);
+        return found ? found : { ...def, year: '2026', semester: '1' };
+      });
+      currentStatusRatios.forEach(r => {
+        if (!displayStatusRatios.find(d => d.subject === r.subject && d.grade === r.grade)) displayStatusRatios.push(r);
+      });
+    } else {
+      displayStatusRatios = [...currentStatusRatios];
+    }
+
+    if (displayStatusRatios.length === 0) {
       return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">해당 학기({vYear}년 {vSem}학기)에 입력된 평가 비율 데이터가 없습니다.</div>;
     }
 
     return (
       <div className="w-full">
         {[1, 2, 3].map(g => {
-          const gradeRatios = currentStatusRatios.filter(r => String(r.grade) === String(g));
+          const gradeRatios = displayStatusRatios.filter(r => String(r.grade) === String(g));
           if (gradeRatios.length === 0) return null;
           return (
             <div key={g} className="mb-8">
