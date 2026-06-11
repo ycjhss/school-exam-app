@@ -695,10 +695,13 @@ export default function App() {
     link.download = `추정분할점수표_${vYear}_${vSem}학기_${vExam}.csv`; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
   };
 
+  // 💡 제출 현황에서 선택된 연도/학기(vYear, vSem)를 기준으로 비율표 엑셀 다운로드
   const handleExportRatioCSV = () => {
     let csv = "\uFEFF학년,과목(학점),1차 정기시험,2차 정기시험,수행평가(1),수행평가(2),수행평가(3),수행평가(4),수행평가(5),논술형 비율(%),계,최종확인\n";
+    const exportRatios = assessmentRatios.filter(r => String(r.year) === String(vYear) && String(r.semester) === String(vSem));
+    
     [1, 2, 3].forEach(g => {
-      const gradeRatios = currentRatios.filter(r => String(r.grade) === String(g));
+      const gradeRatios = exportRatios.filter(r => String(r.grade) === String(g));
       gradeRatios.forEach(r => {
         const row = [g, r.subject, r.exam1, r.exam2, r.perf1, r.perf2, r.perf3, r.perf4, r.perf5, r.essay, r.total, r.isConfirmed ? r.confirmedBy : '미확인'];
         csv += row.map(escapeCSV).join(',') + '\n';
@@ -706,7 +709,7 @@ export default function App() {
     });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url;
-    link.download = `평가비율표_${ratioYear}_${ratioSem}학기.csv`; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
+    link.download = `평가비율표_${vYear}_${vSem}학기.csv`; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
   };
 
   const togglePrintStatus = async (subjectName, isCurrentlyPrinted) => {
@@ -823,10 +826,16 @@ export default function App() {
 
   // 💡 비율 및 수행평가 읽기 전용 렌더링 (제출 현황/인쇄용)
   const renderReadOnlyRatioTable = () => {
+    const currentStatusRatios = assessmentRatios.filter(r => String(r.year) === String(vYear) && String(r.semester) === String(vSem));
+
+    if (currentStatusRatios.length === 0) {
+      return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">해당 학기({vYear}년 {vSem}학기)에 입력된 평가 비율 데이터가 없습니다.</div>;
+    }
+
     return (
       <div className="w-full">
         {[1, 2, 3].map(g => {
-          const gradeRatios = displayRatios.filter(r => String(r.grade) === String(g));
+          const gradeRatios = currentStatusRatios.filter(r => String(r.grade) === String(g));
           if (gradeRatios.length === 0) return null;
           return (
             <div key={g} className="mb-8">
@@ -1292,6 +1301,9 @@ export default function App() {
               {/* 💡 비율 읽기 전용 모드 렌더링 (제출 현황) */}
               {statusTab === 'ratio' && (
                 <div className="animate-fade-in print:block">
+                  <div className="mb-6 text-center text-lg font-black text-amber-800 bg-amber-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
+                    [평가 비율 및 수행 현황] {vYear}학년도 {vSem}학기
+                  </div>
                   <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-2xl font-black tracking-widest">{vYear}학년도 {vSem}학기 과목별 정기시험 및 수행평가 비율</h2></div>
                   {renderReadOnlyRatioTable()}
                 </div>
@@ -1362,6 +1374,9 @@ export default function App() {
 
               {statusTab === 'scope' && (
                 <div className="animate-fade-in print:block">
+                  <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
+                    [시험 범위표] {formatExamOption(viewingExamKey || `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`)}
+                  </div>
                   <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-3xl font-black tracking-widest">{vYear}학년도 {vSem}학기 {vExam} 시험 범위</h2></div>
                   {renderScheduleTable(true)}
                 </div>
@@ -1369,8 +1384,11 @@ export default function App() {
 
               {statusTab === 'cutoff' && (
                 <div className="animate-fade-in print:block">
+                  <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
+                    [추정분할 점수 현황] {formatExamOption(viewingExamKey || `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`)}
+                  </div>
                   <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-3xl font-black tracking-widest">{vYear}학년도 {vSem}학기 {vExam} 추정분할 점수</h2></div>
-                  {renderCutoffTable()}
+                  {renderCutoffTable(true)}
                 </div>
               )}
             </div>
