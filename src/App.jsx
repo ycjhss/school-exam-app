@@ -9,7 +9,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, addDoc, onSnapshot, doc, serverTimestamp, setDoc, deleteDoc } from 'firebase/firestore';
 
-// 🚨 파이어베이스 설정 (선생님의 값 유지됨)
+// 🚨 파이어베이스 설정
 const firebaseConfig = {
   apiKey: "AIzaSyCUgfIQSpk_ifhQTUlj0EMU6jrutoRMq3U",
   authDomain: "timetablc.firebaseapp.com",
@@ -325,6 +325,7 @@ export default function App() {
   const [pinError, setPinError] = useState(false);
 
   const [selectedSubmission, setSelectedSubmission] = useState(null); 
+  
   const [viewingExamKey, setViewingExamKey] = useState(''); 
   const [viewingRatioKey, setViewingRatioKey] = useState('');
 
@@ -336,7 +337,7 @@ export default function App() {
     ],
     checklist: defaultChecklistData,
     schedules: {},
-    perfSubjects: {}, // 💡 수행평가 대상 과목 DB 구조 추가
+    perfSubjects: {}, 
     activeSettings: defaultActiveSettings
   };
 
@@ -378,7 +379,7 @@ export default function App() {
   const [adminMessage, setAdminMessage] = useState({ type: '', text: '' });
   const [bulkInput, setBulkInput] = useState(''); 
   const [scheduleBulkInput, setScheduleBulkInput] = useState('');
-  const [perfBulkInput, setPerfBulkInput] = useState(''); // 💡 수행평가 과목 일괄입력 상태
+  const [perfBulkInput, setPerfBulkInput] = useState(''); 
   const [allSignatures, setAllSignatures] = useState([]); 
   const [printStatuses, setPrintStatuses] = useState([]); 
   const [newChecklistType, setNewChecklistType] = useState('item1');
@@ -479,7 +480,6 @@ export default function App() {
   const viewingScopes = examScopes.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
   const viewingCutoffs = examCutoffs.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
   
-  // 시간표 복원 로직
   let scheduleToDisplay = globalSettings.schedules?.[currentExamKey];
   if (!scheduleToDisplay || scheduleToDisplay.length === 0) {
     const legacyKey = `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`;
@@ -495,7 +495,6 @@ export default function App() {
   }
   scheduleToDisplay = scheduleToDisplay || [];
 
-  // 서명용 과목 복원 로직
   let subjectsToDisplay = Array.isArray(globalSettings.subjects) ? globalSettings.subjects.map(s => {
     const submittedTeachers = [...new Set(viewingSignatures.filter(sig => sig.subject === s.name).map(sig => sig.teacherName))];
     return { ...s, teachers: [...new Set([...(s.teachers || []), ...submittedTeachers])] };
@@ -508,7 +507,6 @@ export default function App() {
     }
   });
 
-  // 💡 현황판 조회를 위한 통합 uniqueSubjectGrades (수행평가 여부에 따라 동적 로딩)
   let baseListForCutoffStatus = [];
   if (vExam === '수행평가') {
     baseListForCutoffStatus = globalSettings.perfSubjects?.[`${vYear}|${vSem}`] || [];
@@ -525,7 +523,6 @@ export default function App() {
   });
   const uniqueSubjectGrades = Array.from(uniqueSubjectGradesMapGlobal.values()).sort((a,b) => String(a.grade || '').localeCompare(String(b.grade || '')) || String(a.subject || '').localeCompare(String(b.subject || '')));
 
-  // 💡 추정분할 입력 폼 전용 콤보박스 데이터 세팅 (localCutoffExam 기준)
   let formBaseList = [];
   if (localCutoffExam === '수행평가') {
     formBaseList = globalSettings.perfSubjects?.[`${currentVYear}|${currentVSem}`] || [];
@@ -570,9 +567,10 @@ export default function App() {
     if (!selectedScheduleItem) { alert("과목을 선택해주세요."); return; }
     setIsSaving(true);
     try {
-      const docId = getScopeId(currentVYear, currentVSem, currentVExam, selectedScheduleItem);
+      const docId = getScopeId(String(activeScope.year), String(activeScope.semester), String(activeScope.examName), selectedScheduleItem);
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examScopes', docId), {
-        year: currentVYear, semester: currentVSem, examName: currentVExam, date: selectedScheduleItem.date, grade: selectedScheduleItem.grade,
+        year: String(activeScope.year), semester: String(activeScope.semester), examName: String(activeScope.examName), 
+        date: selectedScheduleItem.date, grade: selectedScheduleItem.grade,
         period: selectedScheduleItem.period, subject: selectedScheduleItem.subject, scopeText: scopeInputText, teacherName: scopeInputTeacher.trim(),
         updatedAt: serverTimestamp()
       });
@@ -587,7 +585,7 @@ export default function App() {
     setIsSaving(true);
     try {
       const [g, s] = cutoffSubjectGrade.split('|');
-      const docId = `${currentVYear}_${currentVSem}_${localCutoffExam}_${g}_${s}`.replace(/\s/g, '');
+      const docId = `${activeCutoff.year}_${activeCutoff.semester}_${localCutoffExam}_${g}_${s}`.replace(/\s/g, '');
       const isAllEmpty = !cutoffScores.ab && !cutoffScores.bc && !cutoffScores.cd && !cutoffScores.de && !cutoffScores.ei;
 
       if (isAllEmpty) {
@@ -595,7 +593,7 @@ export default function App() {
         alert("입력된 점수가 없어 기존 기록이 완전히 삭제(초기화)되었습니다.");
       } else {
         await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examCutoffs', docId), {
-          year: currentVYear, semester: currentVSem, examName: localCutoffExam, grade: g, subject: s,
+          year: String(activeCutoff.year), semester: String(activeCutoff.semester), examName: localCutoffExam, grade: g, subject: s,
           ab: cutoffScores.ab, bc: cutoffScores.bc, cd: cutoffScores.cd, de: cutoffScores.de, ei: cutoffScores.ei,
           teacherName: cutoffTeacher.trim(), updatedAt: serverTimestamp()
         });
@@ -624,8 +622,7 @@ export default function App() {
   const handleRatioSave = async (data, isConfirm = false, confirmName = '', isUnconfirm = false) => {
     const totalVal = String(data.total || '').trim();
     if (!isUnconfirm && totalVal !== '100' && totalVal !== 'P.F교과') {
-      alert(`입력하신 비율의 계(총합)가 100이 아닙니다! (현재: ${totalVal})\n100%가 되도록 수정한 후 저장/확인해 주세요.`);
-      return;
+      alert(`입력하신 비율의 계(총합)가 100이 아닙니다! (현재: ${totalVal})\n100%가 되도록 수정한 후 저장/확인해 주세요.`); return;
     }
     if (isConfirm && !confirmName.trim()) { alert("확인자 성함을 입력해주세요."); return; }
     if (!data.subject) { alert("과목명을 입력해야 합니다."); return; }
@@ -708,7 +705,6 @@ export default function App() {
     });
   };
 
-  // 💡 수행평가 과목 일괄입력 핸들러 추가
   const handlePerfBulkPaste = () => {
     if(!perfBulkInput.trim()) return;
     const lines = perfBulkInput.split('\n');
@@ -934,10 +930,16 @@ export default function App() {
         const found = currentStatusRatios.find(r => r.subject === def.subject && r.grade === def.grade);
         return found ? found : { ...def, year: '2026', semester: '1' };
       });
-      currentStatusRatios.forEach(r => { if (!displayStatusRatios.find(d => d.subject === r.subject && d.grade === r.grade)) displayStatusRatios.push(r); });
-    } else { displayStatusRatios = [...currentStatusRatios]; }
+      currentStatusRatios.forEach(r => {
+        if (!displayStatusRatios.find(d => d.subject === r.subject && d.grade === r.grade)) displayStatusRatios.push(r);
+      });
+    } else {
+      displayStatusRatios = [...currentStatusRatios];
+    }
 
-    if (displayStatusRatios.length === 0) return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">해당 학기({vRatioYear}년 {vRatioSem}학기)에 입력된 평가 비율 데이터가 없습니다.</div>;
+    if (displayStatusRatios.length === 0) {
+      return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">해당 학기({vRatioYear}년 {vRatioSem}학기)에 입력된 평가 및 수행 비율 데이터가 없습니다.</div>;
+    }
 
     return (
       <div className="w-full">
@@ -1007,8 +1009,10 @@ export default function App() {
           <div className="print-document-modal fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 md:p-8 print:static print:block print:bg-white print:p-0 animate-fade-in overflow-y-auto" onClick={() => setSelectedSubmission(null)}>
             <div className="print-document-sheet bg-white p-10 md:p-14 rounded-none md:rounded-[2rem] max-w-4xl w-full shadow-2xl print:shadow-none print:max-w-none print:w-full print:p-0 my-auto" onClick={e => e.stopPropagation()}>
               <div className="print-document-content print:text-black">
+                {/* 💡 수정됨: 제목과 연도고사명이 동일한 폰트 크기로 위아래 배치 */}
+                <h2 className="text-3xl font-black text-center mb-1 tracking-[0.2em]">{baseSub.year === 'undefined' ? '?' : baseSub.year}년 {baseSub.semester === 'undefined' ? '?' : baseSub.semester}학기 {baseSub.examName === 'undefined' ? '' : baseSub.examName}</h2>
                 <h2 className="text-3xl font-black text-center mb-8 tracking-[0.2em]">지필평가 출제 검토 확인서</h2>
-                <p className="text-lg font-bold leading-relaxed mb-4 text-justify">본인은 {baseSub.year === 'undefined' ? '?' : baseSub.year}년 {baseSub.semester === 'undefined' ? '?' : baseSub.semester}학기 {baseSub.examName === 'undefined' ? '' : baseSub.examName} {baseSub.subject}과 시험문제를 출제함에 있어 아래 표와 같은 내용을 검토하였음을 확인합니다.</p>
+                <p className="text-lg font-bold leading-relaxed mb-4 text-justify">본인은 {baseSub.subject}과 시험문제를 출제함에 있어 아래 표와 같은 내용을 검토하였음을 확인합니다.</p>
                 <table className="w-full border-collapse border-2 border-black mb-10 text-[15px] print:text-[14px]">
                   <thead><tr><th className="border-2 border-black p-3 bg-gray-100 font-black text-center" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>검토 사항</th><th className="border-2 border-black p-3 bg-gray-100 font-black text-center w-28 whitespace-nowrap" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>확인여부<br/>(O, X)</th></tr></thead>
                   <tbody>
@@ -1077,7 +1081,7 @@ export default function App() {
           
           <div className="flex flex-wrap bg-gray-200/50 p-1 rounded-xl sm:rounded-2xl border border-gray-200 justify-center">
             <button onClick={() => setViewMode('home')} className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all duration-200 flex items-center gap-1 ${viewMode==='home'?'bg-white text-gray-800 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}><Home size={12}/>홈</button>
-            <button onClick={() => setViewMode('ratio')} className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all duration-200 flex items-center gap-1 ${viewMode==='ratio'?'bg-white text-amber-600 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}><ClipboardList size={12}/>비율/수행</button>
+            <button onClick={() => setViewMode('ratio')} className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all duration-200 flex items-center gap-1 ${viewMode==='ratio'?'bg-white text-amber-600 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}><ClipboardList size={12}/>평가 및 수행 비율</button>
             <button onClick={() => setViewMode('teacher')} className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all duration-200 flex items-center gap-1 ${viewMode==='teacher'?'bg-white text-blue-600 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}><Edit2 size={12}/>출제 서명</button>
             <button onClick={() => setViewMode('scope')} className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all duration-200 flex items-center gap-1 ${viewMode==='scope'?'bg-white text-indigo-600 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}><CalendarDays size={12}/>시험 범위</button>
             <button onClick={() => setViewMode('cutoff')} className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all duration-200 flex items-center gap-1 ${viewMode==='cutoff'?'bg-white text-rose-600 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}><Target size={12}/>추정분할</button>
@@ -1100,7 +1104,7 @@ export default function App() {
                 <button onClick={() => setViewMode('ratio')} className="group bg-white rounded-[2rem] p-6 border-2 border-amber-50 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-amber-400 transition-all text-left relative overflow-hidden flex flex-col h-full">
                   <div className="absolute right-0 top-0 w-28 h-28 bg-amber-50/50 rounded-bl-full group-hover:bg-amber-100 transition-colors" />
                   <div className="w-12 h-12 rounded-2xl bg-amber-600 text-white flex items-center justify-center mb-3 relative z-10 shadow-md shadow-amber-200"><ClipboardList size={22}/></div>
-                  <h3 className="text-lg font-black text-gray-900 mb-2 relative z-10">평가 비율 및 수행</h3>
+                  <h3 className="text-lg font-black text-gray-900 mb-2 relative z-10">평가 및 수행 비율</h3>
                   <p className="text-xs text-gray-500 mb-5 flex-1 relative z-10">과목별 정기시험 및 수행평가 비율을 관리하고 최종 확인합니다.</p>
                   <div className="w-full py-2.5 bg-amber-50 text-amber-700 rounded-xl font-bold text-center text-sm group-hover:bg-amber-600 group-hover:text-white transition-colors relative z-10">비율 관리</div>
                 </button>
@@ -1132,7 +1136,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 평가 비율 입력 화면 */}
+          {/* 💡 평가 비율 및 수행 화면 */}
           {viewMode === 'ratio' && (
             <div className="w-full max-w-[1200px] bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-6 md:p-10 animate-fade-in mt-4">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-gray-100 pb-6">
@@ -1144,7 +1148,10 @@ export default function App() {
                   <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 p-1 rounded-xl px-3">
                     <History size={16} className="text-gray-400"/>
                     <input type="text" value={ratioYear} onChange={e=>setRatioYear(e.target.value)} className="w-16 bg-transparent text-sm font-bold text-center outline-none" />년
-                    <select value={ratioSem} onChange={e=>setRatioSem(e.target.value)} className="bg-transparent text-sm font-bold outline-none ml-2"><option value="1">1학기</option><option value="2">2학기</option></select>
+                    <select value={ratioSem} onChange={e=>setRatioSem(e.target.value)} className="bg-transparent text-sm font-bold outline-none ml-2">
+                      <option value="1">1학기</option>
+                      <option value="2">2학기</option>
+                    </select>
                   </div>
                 </div>
               </div>
@@ -1160,7 +1167,7 @@ export default function App() {
                         <h3 className="text-xl font-black text-gray-800 mb-3 border-l-4 border-amber-500 pl-3">{g}학년</h3>
                         <div className="text-center py-6 bg-gray-50 rounded-2xl text-gray-400 font-bold text-sm">데이터가 없습니다. 아래 버튼으로 과목을 추가하세요.</div>
                         <div className="mt-3 text-right">
-                          <button onClick={() => setNewRatioRows([...newRatioRows, { id: `new_${Date.now()}`, year: ratioYear, semester: ratioSem, grade: g, isConfirmed: false }])} className="text-xs bg-gray-800 text-white px-3 py-1.5 rounded-lg hover:bg-black font-bold flex items-center gap-1 inline-flex"><Plus size={14}/> {g}학년 과목 추가</button>
+                          <button onClick={() => setNewRatioRows([...newRatioRows, { id: `new_${g}_${Date.now()}`, year: ratioYear, semester: ratioSem, grade: g, isConfirmed: false }])} className="text-xs bg-gray-800 text-white px-3 py-1.5 rounded-lg hover:bg-black font-bold flex items-center gap-1 inline-flex"><Plus size={14}/> {g}학년 과목 추가</button>
                         </div>
                       </div>
                     );
@@ -1198,7 +1205,7 @@ export default function App() {
                         </table>
                       </div>
                       <div className="mt-3 text-right">
-                        <button onClick={() => setNewRatioRows([...newRatioRows, { id: `new_${Date.now()}`, year: ratioYear, semester: ratioSem, grade: g, isConfirmed: false }])} className="text-xs bg-gray-800 text-white px-3 py-1.5 rounded-lg hover:bg-black font-bold flex items-center gap-1 inline-flex">
+                        <button onClick={() => setNewRatioRows([...newRatioRows, { id: `new_${g}_${Date.now()}`, year: ratioYear, semester: ratioSem, grade: g, isConfirmed: false }])} className="text-xs bg-gray-800 text-white px-3 py-1.5 rounded-lg hover:bg-black font-bold flex items-center gap-1 inline-flex">
                           <Plus size={14}/> {g}학년 과목 추가
                         </button>
                       </div>
@@ -1215,11 +1222,10 @@ export default function App() {
               <div className="px-6 pt-5 pb-0 print:hidden">
                 <button type="button" onClick={() => setViewMode('home')} className="text-xs font-black text-gray-500 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-200 px-3 py-2 rounded-xl transition-all">← 첫 화면으로</button>
               </div>
-              <div className="bg-gradient-to-br from-blue-600 to-blue-800 text-white p-6 md:p-8 text-center relative overflow-hidden mt-4">
-                <h2 className="text-xl md:text-2xl font-black relative z-10 leading-snug break-keep">
-                  <span className="block mb-1">{String(activeSig.year)}년 {String(activeSig.semester)}학기 {String(activeSig.examName)}</span>
-                  <span className="block">출제 검토 확인서</span>
-                </h2>
+              <div className="bg-gradient-to-br from-blue-600 to-blue-800 text-white p-8 text-center relative overflow-hidden mt-4">
+                {/* 💡 수정됨: 제목을 두 줄로 통일 */}
+                <h2 className="text-2xl font-black mb-1 relative z-10 leading-snug tracking-wide">{String(activeSig.year)}년 {String(activeSig.semester)}학기 {String(activeSig.examName)}</h2>
+                <h2 className="text-2xl font-black relative z-10 leading-snug tracking-wide">출제 검토 확인서</h2>
               </div>
               
               {saveSuccess ? (
@@ -1300,16 +1306,13 @@ export default function App() {
             </div>
           )}
 
-          {/* 시험 범위 입력 화면 */}
+          {/* 💡 시험 범위 입력 화면 */}
           {viewMode === 'scope' && (
             <div className="w-full max-w-5xl animate-fade-in mt-4">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 px-2">
                 <div>
                   <button type="button" onClick={() => setViewMode('home')} className="mb-3 text-xs font-black text-gray-500 hover:text-indigo-600 bg-white hover:bg-indigo-50 border border-gray-200 hover:border-indigo-200 px-3 py-2 rounded-xl transition-all shadow-sm">← 첫 화면으로</button>
-                  <h2 className="text-xl md:text-2xl font-black text-gray-800 flex items-center gap-2 break-keep">
-                    <CalendarDays className="text-indigo-600 shrink-0"/> 
-                    <span>{activeScope.year}년 {activeScope.semester}학기 {activeScope.examName} 범위 입력</span>
-                  </h2>
+                  <h2 className="text-2xl font-black text-gray-800 flex items-center gap-2"><CalendarDays className="text-indigo-600"/> {activeScope.year}년 {activeScope.semester}학기 {activeScope.examName} 범위 입력</h2>
                   <p className="text-gray-500 text-sm font-medium mt-1">담당 과목의 [입력/수정] 버튼을 눌러주세요.</p>
                 </div>
               </div>
@@ -1317,23 +1320,20 @@ export default function App() {
             </div>
           )}
 
-          {/* 추정분할 점수 입력 화면 */}
+          {/* 💡 추정분할 점수 입력 화면 */}
           {viewMode === 'cutoff' && (
             <div className="w-full max-w-md bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] overflow-hidden border border-white relative mt-4">
               <div className="px-6 pt-5 pb-0 print:hidden">
                 <button type="button" onClick={() => setViewMode('home')} className="text-xs font-black text-gray-500 hover:text-rose-600 bg-gray-50 hover:bg-rose-50 border border-gray-200 hover:border-rose-200 px-3 py-2 rounded-xl transition-all">← 첫 화면으로</button>
               </div>
-              <div className="bg-gradient-to-br from-rose-600 to-rose-800 text-white p-6 md:p-8 text-center relative overflow-hidden mt-4">
-                <h2 className="text-xl md:text-2xl font-black mb-2 relative z-10 flex justify-center items-center gap-2 break-keep">
-                  <Target size={24} className="shrink-0"/> 
-                  <span>{activeCutoff.year}년 {activeCutoff.semester}학기 추정분할 점수 입력</span>
-                </h2>
-                <p className="text-rose-100 text-sm font-medium opacity-90 relative z-10">추정분할 고정 과목만 입력해 주세요.</p>
+              <div className="bg-gradient-to-br from-rose-600 to-rose-800 text-white p-8 text-center relative overflow-hidden mt-4">
+                <h2 className="text-2xl font-black mb-2 relative z-10 flex justify-center items-center gap-2 tracking-wide"><Target size={24}/> {activeCutoff.year}년 {activeCutoff.semester}학기 추정분할 점수 입력</h2>
+                <p className="text-rose-100 text-sm font-medium opacity-90 relative z-10 mt-1">추정분할 하는 과목만 입력해 주세요.</p>
               </div>
               <form onSubmit={handleCutoffSubmit} className="p-8 space-y-5">
                 <div className="relative group">
                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1">Exam Type (고사 종류)</label>
-                  <select value={localCutoffExam} onChange={e=>{setLocalCutoffExam(e.target.value); setCutoffSubjectGrade('');}} className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-base font-bold focus:border-rose-500 focus:bg-white transition-all appearance-none outline-none shadow-sm">
+                  <select value={localCutoffExam} onChange={e=>{setLocalCutoffExam(e.target.value); setCutoffSubjectGrade('');}} className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-base font-bold focus:border-rose-500 focus:bg-white transition-all appearance-none outline-none shadow-sm" required>
                     <option value="1차 정기시험">1차 정기시험</option><option value="2차 정기시험">2차 정기시험</option><option value="수행평가">수행평가</option>
                   </select>
                 </div>
@@ -1341,10 +1341,13 @@ export default function App() {
                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1">Subject (과목 선택)</label>
                   <select value={cutoffSubjectGrade} onChange={e=>setCutoffSubjectGrade(e.target.value)} className="w-full p-4 bg-rose-50/50 border-2 border-rose-100 rounded-2xl text-base font-bold text-rose-900 focus:border-rose-500 focus:bg-white transition-all appearance-none outline-none shadow-sm" required>
                     <option value="">과목명 (학년)을 선택하세요</option>
-                    {cutoffSubjectOptions.map((item, idx) => ( <option key={idx} value={`${item.grade}|${item.subject}`}>{item.subject} ({item.grade}학년)</option> ))}
+                    {cutoffSubjectOptions.map((item, idx) => (
+                      <option key={idx} value={`${item.grade}|${item.subject}`}>{item.subject} ({item.grade}학년)</option>
+                    ))}
                   </select>
                   {cutoffSubjectOptions.length === 0 && <p className="text-xs text-red-500 mt-2 font-bold px-2">해당 고사에 등록된 과목이나 시간표가 없습니다. 관리자 메뉴에서 세팅해주세요.</p>}
                 </div>
+                
                 {cutoffSubjectGrade && (
                   <div className="animate-fade-in space-y-4 pt-2 border-t border-gray-100">
                     <div className="grid grid-cols-2 gap-3">
@@ -1355,14 +1358,16 @@ export default function App() {
                       <div className="col-span-2"><label className="block text-xs font-black text-gray-500 mb-1 ml-1">E / I (또는 미만)</label><input type="number" step="0.01" value={cutoffScores.ei} onChange={e=>setCutoffScores({...cutoffScores, ei: e.target.value})} className="w-full p-3 bg-rose-50 border-2 border-rose-100 rounded-xl text-center font-bold focus:border-rose-500 outline-none" placeholder="예: 19.95"/></div>
                     </div>
                     <div><label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1 mt-2">Teacher (성함)</label><input type="text" value={cutoffTeacher} onChange={e=>setCutoffTeacher(e.target.value)} className="w-full p-3 bg-gray-50 border-2 border-gray-200 rounded-xl text-sm font-bold focus:border-rose-500 outline-none" placeholder="입력자 성함 (선택 입력)"/></div>
-                    <button type="submit" disabled={isSaving} className="w-full py-4 mt-2 bg-gray-900 text-white rounded-xl font-black shadow-md hover:bg-black transition-all active:scale-95 flex items-center justify-center gap-2"><Save size={18}/> 점수 저장하기</button>
+                    <button type="submit" disabled={isSaving} className="w-full py-4 mt-2 bg-gray-900 text-white rounded-xl font-black shadow-md hover:bg-black transition-all active:scale-95 flex items-center justify-center gap-2">
+                      {isSaving ? '저장 중...' : <><Save size={18}/> 점수 저장하기</>}
+                    </button>
                   </div>
                 )}
               </form>
             </div>
           )}
 
-          {/* 관리자 제출 현황 화면 */}
+          {/* 제출 현황 화면 */}
           {viewMode === 'status' && (
             <div className="print-status-page w-full max-w-5xl bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-6 md:p-10 animate-fade-in mt-4 print:shadow-none print:p-0 print:mt-0 print:border-none print:bg-transparent">
               
@@ -1407,7 +1412,7 @@ export default function App() {
               {statusTab === 'ratio' && (
                 <div className="animate-fade-in print:block">
                   <div className="mb-6 text-center text-lg font-black text-amber-800 bg-amber-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
-                    [평가 비율 및 수행 현황] {vRatioYear}학년도 {vRatioSem}학기
+                    [평가 및 수행 비율 현황] {vRatioYear}학년도 {vRatioSem}학기
                   </div>
                   <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-2xl font-black tracking-widest">{vRatioYear}학년도 {vRatioSem}학기 과목별 정기시험 및 수행평가 비율</h2></div>
                   {renderReadOnlyRatioTable()}
@@ -1417,7 +1422,7 @@ export default function App() {
               {statusTab === 'signature' && (
                 <div className="animate-fade-in print:block">
                   <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
-                    [출제 검토 서명 현황] {formatExamOption(viewingExamKey)}
+                    [출제 검토 서명 현황] {formatExamOption(viewingExamKey || `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`)}
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 print:grid-cols-2">
                     {subjectsToDisplay.map(subject => {
@@ -1480,7 +1485,7 @@ export default function App() {
               {statusTab === 'scope' && (
                 <div className="animate-fade-in print:block">
                   <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
-                    [시험 범위표] {formatExamOption(viewingExamKey)}
+                    [시험 범위표] {formatExamOption(viewingExamKey || `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`)}
                   </div>
                   <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-3xl font-black tracking-widest">{vYear}학년도 {vSem}학기 {vExam} 시험 범위</h2></div>
                   {renderScheduleTable(true)}
@@ -1490,10 +1495,10 @@ export default function App() {
               {statusTab === 'cutoff' && (
                 <div className="animate-fade-in print:block">
                   <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
-                    [추정분할 점수 현황] {formatExamOption(viewingExamKey)}
+                    [추정분할 점수 현황] {formatExamOption(viewingExamKey || `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`)}
                   </div>
                   <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-3xl font-black tracking-widest">{vYear}학년도 {vSem}학기 {vExam} 추정분할 점수</h2></div>
-                  {renderCutoffTable()}
+                  {renderCutoffTable(true)}
                 </div>
               )}
             </div>
@@ -1525,56 +1530,40 @@ export default function App() {
               {adminMessage.text && ( <div className={`p-4 rounded-2xl mb-6 text-sm font-bold flex items-center gap-2 ${adminMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{adminMessage.type === 'success' ? <CheckCircle size={18}/> : <AlertCircle size={18}/>}{adminMessage.text}</div> )}
 
               <div className="space-y-10">
-                {/* 1. 업무별 독립 세팅 (4분할) */}
-                <div>
-                  <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
-                    <Target size={20} className="text-purple-500"/> 업무별 진행 시기 세팅
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    
-                    <div className="bg-amber-50/40 border border-amber-200 rounded-2xl p-4">
-                      <div className="flex items-center gap-2 mb-3"><ClipboardList size={16} className="text-amber-600"/><h4 className="font-bold text-amber-900 text-sm">평가 비율 및 수행평가</h4></div>
-                      <div className="flex gap-2">
-                        <input type="text" value={adminData.activeSettings?.ratio?.year || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, ratio: {...p.activeSettings.ratio, year: e.target.value}}}))} className="w-1/2 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-amber-500 outline-none" placeholder="연도 (예: 2026)"/>
-                        <select value={adminData.activeSettings?.ratio?.semester || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, ratio: {...p.activeSettings.ratio, semester: e.target.value}}}))} className="w-1/2 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-amber-500 outline-none"><option value="1">1학기</option><option value="2">2학기</option></select>
-                      </div>
-                    </div>
-
-                    <div className="bg-blue-50/40 border border-blue-200 rounded-2xl p-4">
-                      <div className="flex items-center gap-2 mb-3"><Edit2 size={16} className="text-blue-600"/><h4 className="font-bold text-blue-900 text-sm">출제 서명</h4></div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <input type="text" value={adminData.activeSettings?.signature?.year || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, signature: {...p.activeSettings.signature, year: e.target.value}}}))} className="p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-blue-500 outline-none" placeholder="연도"/>
-                        <select value={adminData.activeSettings?.signature?.semester || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, signature: {...p.activeSettings.signature, semester: e.target.value}}}))} className="p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-blue-500 outline-none"><option value="1">1학기</option><option value="2">2학기</option></select>
-                        <input type="text" value={adminData.activeSettings?.signature?.examName || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, signature: {...p.activeSettings.signature, examName: e.target.value}}}))} className="p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-blue-500 outline-none" placeholder="고사명 (예: 1차)"/>
-                        <input type="text" value={adminData.activeSettings?.signature?.documentDate || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, signature: {...p.activeSettings.signature, documentDate: e.target.value}}}))} className="p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-blue-500 outline-none" placeholder="출력용 날짜"/>
-                      </div>
-                    </div>
-
-                    <div className="bg-indigo-50/40 border border-indigo-200 rounded-2xl p-4">
-                      <div className="flex items-center gap-2 mb-3"><CalendarDays size={16} className="text-indigo-600"/><h4 className="font-bold text-indigo-900 text-sm">시험 범위 입력</h4></div>
-                      <div className="flex gap-2">
-                        <input type="text" value={adminData.activeSettings?.scope?.year || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, scope: {...p.activeSettings.scope, year: e.target.value}}}))} className="w-1/3 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-indigo-500 outline-none" placeholder="연도"/>
-                        <select value={adminData.activeSettings?.scope?.semester || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, scope: {...p.activeSettings.scope, semester: e.target.value}}}))} className="w-1/3 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-indigo-500 outline-none"><option value="1">1학기</option><option value="2">2학기</option></select>
-                        <input type="text" value={adminData.activeSettings?.scope?.examName || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, scope: {...p.activeSettings.scope, examName: e.target.value}}}))} className="w-1/3 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-indigo-500 outline-none" placeholder="고사명"/>
-                      </div>
-                    </div>
-
-                    <div className="bg-rose-50/40 border border-rose-200 rounded-2xl p-4">
-                      <div className="flex items-center gap-2 mb-3"><Target size={16} className="text-rose-600"/><h4 className="font-bold text-rose-900 text-sm">추정분할 점수 기본연도</h4></div>
-                      <div className="flex gap-2">
-                        <input type="text" value={adminData.activeSettings?.cutoff?.year || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, cutoff: {...p.activeSettings.cutoff, year: e.target.value}}}))} className="w-1/2 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-rose-500 outline-none" placeholder="연도"/>
-                        <select value={adminData.activeSettings?.cutoff?.semester || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, cutoff: {...p.activeSettings.cutoff, semester: e.target.value}}}))} className="w-1/2 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-rose-500 outline-none"><option value="1">1학기</option><option value="2">2학기</option></select>
-                      </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-amber-50/40 border border-amber-200 rounded-2xl p-4">
+                    <div className="flex items-center gap-2 mb-3"><ClipboardList size={16} className="text-amber-600"/><h4 className="font-bold text-amber-900 text-sm">평가 비율 및 수행평가</h4></div>
+                    <div className="flex gap-2">
+                      <input type="text" value={adminData.activeSettings?.ratio?.year || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, ratio: {...p.activeSettings.ratio, year: e.target.value}}}))} className="w-1/2 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-amber-500 outline-none" placeholder="연도 (예: 2026)"/>
+                      <select value={adminData.activeSettings?.ratio?.semester || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, ratio: {...p.activeSettings.ratio, semester: e.target.value}}}))} className="w-1/2 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-amber-500 outline-none"><option value="1">1학기</option><option value="2">2학기</option></select>
                     </div>
                   </div>
-                  
-                  <div className="mt-4 flex items-center justify-between bg-purple-50 p-3 rounded-xl border border-purple-200">
-                    <label className="text-xs font-bold text-purple-800 ml-2">관리자 비밀번호 변경</label>
-                    <input type="text" value={adminData.adminPassword || '1234'} onChange={e=>setAdminData({...adminData, adminPassword: e.target.value})} className="w-32 p-2 bg-white border border-purple-200 text-purple-700 rounded-lg text-center text-sm font-black focus:border-purple-500 outline-none"/>
+                  <div className="bg-blue-50/40 border border-blue-200 rounded-2xl p-4">
+                    <div className="flex items-center gap-2 mb-3"><Edit2 size={16} className="text-blue-600"/><h4 className="font-bold text-blue-900 text-sm">출제 서명</h4></div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input type="text" value={adminData.activeSettings?.signature?.year || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, signature: {...p.activeSettings.signature, year: e.target.value}}}))} className="p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-blue-500 outline-none" placeholder="연도"/>
+                      <select value={adminData.activeSettings?.signature?.semester || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, signature: {...p.activeSettings.signature, semester: e.target.value}}}))} className="p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-blue-500 outline-none"><option value="1">1학기</option><option value="2">2학기</option></select>
+                      <input type="text" value={adminData.activeSettings?.signature?.examName || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, signature: {...p.activeSettings.signature, examName: e.target.value}}}))} className="p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-blue-500 outline-none" placeholder="고사명"/>
+                      <input type="text" value={adminData.activeSettings?.signature?.documentDate || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, signature: {...p.activeSettings.signature, documentDate: e.target.value}}}))} className="p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-blue-500 outline-none" placeholder="출력용 날짜"/>
+                    </div>
+                  </div>
+                  <div className="bg-indigo-50/40 border border-indigo-200 rounded-2xl p-4">
+                    <div className="flex items-center gap-2 mb-3"><CalendarDays size={16} className="text-indigo-600"/><h4 className="font-bold text-indigo-900 text-sm">시험 범위 입력</h4></div>
+                    <div className="flex gap-2">
+                      <input type="text" value={adminData.activeSettings?.scope?.year || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, scope: {...p.activeSettings.scope, year: e.target.value}}}))} className="w-1/3 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-indigo-500 outline-none" placeholder="연도"/>
+                      <select value={adminData.activeSettings?.scope?.semester || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, scope: {...p.activeSettings.scope, semester: e.target.value}}}))} className="w-1/3 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-indigo-500 outline-none"><option value="1">1학기</option><option value="2">2학기</option></select>
+                      <input type="text" value={adminData.activeSettings?.scope?.examName || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, scope: {...p.activeSettings.scope, examName: e.target.value}}}))} className="w-1/3 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-indigo-500 outline-none" placeholder="고사명"/>
+                    </div>
+                  </div>
+                  <div className="bg-rose-50/40 border border-rose-200 rounded-2xl p-4">
+                    <div className="flex items-center gap-2 mb-3"><Target size={16} className="text-rose-600"/><h4 className="font-bold text-rose-900 text-sm">추정분할 점수 기본연도</h4></div>
+                    <div className="flex gap-2">
+                      <input type="text" value={adminData.activeSettings?.cutoff?.year || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, cutoff: {...p.activeSettings.cutoff, year: e.target.value}}}))} className="w-1/2 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-rose-500 outline-none" placeholder="연도"/>
+                      <select value={adminData.activeSettings?.cutoff?.semester || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, cutoff: {...p.activeSettings.cutoff, semester: e.target.value}}}))} className="w-1/2 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-rose-500 outline-none"><option value="1">1학기</option><option value="2">2학기</option></select>
+                    </div>
                   </div>
                 </div>
 
-                {/* 2. 시험 시간표 설정 */}
                 <div className="pt-4 border-t border-gray-100">
                   <h3 className="text-lg font-black text-gray-800 mb-2 flex items-center gap-2">
                     <CalendarDays size={20} className="text-purple-500"/> 
@@ -1600,7 +1589,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 💡 수행평가 과목 설정 (추정분할 전용) */}
                 <div className="pt-4 border-t border-gray-100">
                   <h3 className="text-lg font-black text-gray-800 mb-2 flex items-center gap-2">
                     <Target size={20} className="text-rose-500"/> 
