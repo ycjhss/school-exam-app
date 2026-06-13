@@ -566,10 +566,9 @@ export default function App() {
     if (!selectedScheduleItem) { alert("과목을 선택해주세요."); return; }
     setIsSaving(true);
     try {
-      const vYear = String(globalSettings.year); const vSem = String(globalSettings.semester); const vExam = String(globalSettings.examName);
-      const docId = getScopeId(vYear, vSem, vExam, selectedScheduleItem);
+      const docId = getScopeId(currentVYear, currentVSem, currentVExam, selectedScheduleItem);
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examScopes', docId), {
-        year: vYear, semester: vSem, examName: vExam, date: selectedScheduleItem.date, grade: selectedScheduleItem.grade,
+        year: currentVYear, semester: currentVSem, examName: currentVExam, date: selectedScheduleItem.date, grade: selectedScheduleItem.grade,
         period: selectedScheduleItem.period, subject: selectedScheduleItem.subject, scopeText: scopeInputText, teacherName: scopeInputTeacher.trim(),
         updatedAt: serverTimestamp()
       });
@@ -592,16 +591,15 @@ export default function App() {
 
     setIsSaving(true);
     try {
-      const vYear = String(globalSettings.year); const vSem = String(globalSettings.semester); const vExam = String(globalSettings.examName);
       const [g, s] = cutoffSubjectGrade.split('|');
-      const docId = `${vYear}_${vSem}_${vExam}_${g}_${s}`.replace(/\s/g, '');
+      const docId = `${currentVYear}_${currentVSem}_${currentVExam}_${g}_${s}`.replace(/\s/g, '');
 
       if (isAllEmpty) {
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examCutoffs', docId));
         alert("입력된 점수가 없어 기존 기록이 완전히 삭제(초기화)되었습니다.");
       } else {
         await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examCutoffs', docId), {
-          year: vYear, semester: vSem, examName: vExam, grade: g, subject: s,
+          year: currentVYear, semester: currentVSem, examName: currentVExam, grade: g, subject: s,
           ab: cutoffScores.ab, bc: cutoffScores.bc, cd: cutoffScores.cd, de: cutoffScores.de, ei: cutoffScores.ei,
           teacherName: cutoffTeacher.trim(), updatedAt: serverTimestamp()
         });
@@ -612,7 +610,17 @@ export default function App() {
     setIsSaving(false);
   };
 
-  // 💡 비율 데이터 필터 및 병합 로직 (2026-1 초기화 자동 반영)
+  // 비율 데이터 표시를 위한 데이터 병합
+  const inputRatios = assessmentRatios.filter(r => String(r.year) === String(ratioYear) && String(r.semester) === String(ratioSem));
+  let displayRatios = [];
+  if (String(ratioYear) === '2026' && String(ratioSem) === '1') {
+    displayRatios = defaultAssessment2026S1.map(def => {
+      const found = inputRatios.find(r => r.subject === def.subject && r.grade === def.grade);
+      return found ? found : { ...def, year: '2026', semester: '1', id: `def_2026_1_${def.grade}_${def.subject}`.replace(/\s/g, ''), isUnsavedDefault: true };
+    });
+    inputRatios.forEach(r => {
+      if (!displayRatios.find(d => d.subject === r.subject && d.grade === r.grade)) displayRatios.push(r);
+    });
   } else {
     displayRatios = [...inputRatios];
   }
@@ -1111,7 +1119,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 평가 비율 화면 */}
+          {/* 평가 비율 입력 화면 */}
           {viewMode === 'ratio' && (
             <div className="w-full max-w-[1200px] bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-6 md:p-10 animate-fade-in mt-4">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-gray-100 pb-6">
@@ -1123,22 +1131,35 @@ export default function App() {
                   <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 p-1 rounded-xl px-3">
                     <History size={16} className="text-gray-400"/>
                     <input type="text" value={ratioYear} onChange={e=>setRatioYear(e.target.value)} className="w-16 bg-transparent text-sm font-bold text-center outline-none" />년
-                    <select value={ratioSem} onChange={e=>setRatioSem(e.target.value)} className="bg-transparent text-sm font-bold outline-none ml-2"><option value="1">1학기</option><option value="2">2학기</option></select>
+                    <select value={ratioSem} onChange={e=>setRatioSem(e.target.value)} className="bg-transparent text-sm font-bold outline-none ml-2">
+                      <option value="1">1학기</option>
+                      <option value="2">2학기</option>
+                    </select>
                   </div>
                 </div>
               </div>
 
+              {ratioYear === '2026' && ratioSem === '1' && currentRatios.length === 0 && displayRatios.length === 0 && (
+                <div className="mb-6 p-6 bg-amber-50 border border-amber-200 rounded-2xl text-center print:hidden">
+                  <p className="text-amber-800 font-bold mb-3">2026학년도 1학기 데이터가 아직 없습니다.</p>
+                  <button onClick={handleLoadDefaultRatios} className="bg-amber-600 text-white px-6 py-2.5 rounded-xl font-black shadow-md hover:bg-amber-700 active:scale-95 transition-all">
+                    1학기 원본 데이터 (기본값) 불러오기
+                  </button>
+                </div>
+              )}
+
               <div className="w-full">
                 {[1, 2, 3].map(g => {
                   const gradeRatios = displayRatios.filter(r => String(r.grade) === String(g));
+                  const newRows = newRatioRows.filter(r => String(r.grade) === String(g) && String(r.year) === String(ratioYear) && String(r.semester) === String(ratioSem));
                   
-                  if (gradeRatios.length === 0) {
+                  if (gradeRatios.length === 0 && newRows.length === 0) {
                     return (
                       <div key={g} className="mb-8">
                         <h3 className="text-xl font-black text-gray-800 mb-3 border-l-4 border-amber-500 pl-3">{g}학년</h3>
                         <div className="text-center py-6 bg-gray-50 rounded-2xl text-gray-400 font-bold text-sm">데이터가 없습니다. 아래 버튼으로 과목을 추가하세요.</div>
                         <div className="mt-3 text-right">
-                          <button onClick={() => setNewRatioRows(prev => [...prev, { id: `new_${g}_${Date.now()}`, year: ratioYear, semester: ratioSem, grade: g, isConfirmed: false }])} className="text-xs bg-gray-800 text-white px-3 py-1.5 rounded-lg hover:bg-black font-bold flex items-center gap-1 inline-flex"><Plus size={14}/> {g}학년 과목 추가</button>
+                          <button onClick={() => setNewRatioRows([...newRatioRows, { id: `new_${g}_${Date.now()}`, year: ratioYear, semester: ratioSem, grade: g, isConfirmed: false }])} className="text-xs bg-gray-800 text-white px-3 py-1.5 rounded-lg hover:bg-black font-bold flex items-center gap-1 inline-flex"><Plus size={14}/> {g}학년 과목 추가</button>
                         </div>
                       </div>
                     );
@@ -1171,11 +1192,12 @@ export default function App() {
                           </thead>
                           <tbody>
                             {gradeRatios.map(item => <RatioRow key={item.id} item={item} year={ratioYear} sem={ratioSem} grade={g} onSave={handleRatioSave} onDelete={handleRatioDelete} />)}
+                            {newRows.map(item => <RatioRow key={item.id} item={item} year={ratioYear} sem={ratioSem} grade={g} onSave={handleRatioSave} onDelete={handleRatioDelete} />)}
                           </tbody>
                         </table>
                       </div>
                       <div className="mt-3 text-right">
-                        <button onClick={() => setNewRatioRows(prev => [...prev, { id: `new_${g}_${Date.now()}`, year: ratioYear, semester: ratioSem, grade: g, isConfirmed: false }])} className="text-xs bg-gray-800 text-white px-3 py-1.5 rounded-lg hover:bg-black font-bold flex items-center gap-1 inline-flex">
+                        <button onClick={() => setNewRatioRows([...newRatioRows, { id: `new_${g}_${Date.now()}`, year: ratioYear, semester: ratioSem, grade: g, isConfirmed: false }])} className="text-xs bg-gray-800 text-white px-3 py-1.5 rounded-lg hover:bg-black font-bold flex items-center gap-1 inline-flex">
                           <Plus size={14}/> {g}학년 과목 추가
                         </button>
                       </div>
@@ -1455,7 +1477,7 @@ export default function App() {
               {statusTab === 'scope' && (
                 <div className="animate-fade-in print:block">
                   <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
-                    [시험 범위표] {formatExamOption(viewingExamKey || `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`)}
+                    [시험 범위표] {formatExamOption(viewingExamKey)}
                   </div>
                   <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-3xl font-black tracking-widest">{vYear}학년도 {vSem}학기 {vExam} 시험 범위</h2></div>
                   {renderScheduleTable(true)}
@@ -1465,7 +1487,7 @@ export default function App() {
               {statusTab === 'cutoff' && (
                 <div className="animate-fade-in print:block">
                   <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
-                    [추정분할 점수 현황] {formatExamOption(viewingExamKey || `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`)}
+                    [추정분할 점수 현황] {formatExamOption(viewingExamKey)}
                   </div>
                   <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-3xl font-black tracking-widest">{vYear}학년도 {vSem}학기 {vExam} 추정분할 점수</h2></div>
                   {renderCutoffTable(true)}
@@ -1560,15 +1582,9 @@ export default function App() {
                 </div>
 
                 <div className="pt-4 border-t border-gray-100">
-                  <h3 className="text-lg font-black text-gray-800 mb-2 flex items-center gap-2">
-                    <Users size={20} className="text-purple-500"/> 서명용 공통 과목 및 교사 명단 보관함
-                  </h3>
-                  <p className="text-xs text-purple-700 mb-4 font-bold bg-purple-50 inline-block px-3 py-1.5 rounded-lg border border-purple-100">
-                    💡 이 명단은 모든 학기와 고사에서 공통으로 유지(재사용)됩니다.
-                  </p>
+                  <h3 className="text-lg font-black text-gray-800 mb-2 flex items-center gap-2"><Users size={20} className="text-purple-500"/> 서명용 공통 과목 및 교사 명단 보관함</h3>
                   <div className="mb-6 p-5 bg-purple-50/50 border border-purple-100 rounded-2xl">
                     <h4 className="text-sm font-black text-purple-900 mb-2 flex items-center gap-2"><FileText size={16}/> 엑셀 명단 대량 붙여넣기</h4>
-                    <p className="text-xs text-purple-700 mb-3 opacity-80">엑셀에서 <strong>[과목명] [교사명1] [교사명2]...</strong> 형태의 표를 복사해 아래에 붙여넣으세요.</p>
                     <textarea value={bulkInput} onChange={e => setBulkInput(e.target.value)} className="w-full h-24 p-3 bg-white border border-purple-200 rounded-xl text-sm outline-none focus:border-purple-500 resize-none custom-scrollbar" />
                     <button onClick={handleBulkPaste} type="button" className="mt-3 px-4 py-2 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700 shadow-sm active:scale-95">명단 일괄 적용하기</button>
                   </div>
