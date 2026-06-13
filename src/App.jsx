@@ -211,10 +211,11 @@ const RatioRow = ({ item, year, sem, grade, onSave, onDelete }) => {
   const [formData, setFormData] = useState(item);
   const [confirmName, setConfirmName] = useState(item.confirmedBy || '');
 
+  // 💡 직렬화(JSON.stringify)를 통해 불필요한 무한 렌더링 방지
   useEffect(() => {
     setFormData(item);
     setConfirmName(item.confirmedBy || '');
-  }, [item]);
+  }, [JSON.stringify(item)]);
 
   const handleChange = (field, val) => {
     setFormData(prev => {
@@ -334,6 +335,7 @@ export default function App() {
     ],
     checklist: defaultChecklistData,
     schedules: {},
+    perfSchedules: {}, // 💡 수행평가 대상 과목 관리 State 추가
     activeSettings: defaultActiveSettings
   };
 
@@ -371,6 +373,7 @@ export default function App() {
   const [adminMessage, setAdminMessage] = useState({ type: '', text: '' });
   const [bulkInput, setBulkInput] = useState(''); 
   const [scheduleBulkInput, setScheduleBulkInput] = useState('');
+  const [perfBulkInput, setPerfBulkInput] = useState(''); // 💡 수행평가 대량 입력용
   const [allSignatures, setAllSignatures] = useState([]); 
   const [printStatuses, setPrintStatuses] = useState([]); 
   const [newChecklistType, setNewChecklistType] = useState('item1');
@@ -471,7 +474,6 @@ export default function App() {
   const viewingScopes = examScopes.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
   const viewingCutoffs = examCutoffs.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
   
-  // 시간표 복원 로직
   let scheduleToDisplay = globalSettings.schedules?.[currentExamKey];
   if (!scheduleToDisplay || scheduleToDisplay.length === 0) {
     const legacyKey = `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`;
@@ -487,7 +489,6 @@ export default function App() {
   }
   scheduleToDisplay = scheduleToDisplay || [];
 
-  // 서명용 과목명 복원 로직
   let subjectsToDisplay = Array.isArray(globalSettings.subjects) ? globalSettings.subjects.map(s => {
     const submittedTeachers = [...new Set(viewingSignatures.filter(sig => sig.subject === s.name).map(sig => sig.teacherName))];
     return { ...s, teachers: [...new Set([...(s.teachers || []), ...submittedTeachers])] };
@@ -500,16 +501,16 @@ export default function App() {
     }
   });
 
-  // 추정분할용 동적 옵션 생성 로직
+  // 💡 추정분할용 동적 옵션 (수행평가 엑셀 데이터 연동 반영)
   let cutoffSubjectOptions = [];
   if (localCutoffExam === '수행평가') {
-    const currentRatiosForCutoff = assessmentRatios.filter(r => String(r.year) === String(activeCutoff.year) && String(r.semester) === String(activeCutoff.semester));
-    let baseRatios = currentRatiosForCutoff;
-    if (String(activeCutoff.year) === '2026' && String(activeCutoff.semester) === '1' && currentRatiosForCutoff.length === 0) {
-      baseRatios = defaultAssessment2026S1;
-    }
-    const uniqueStr = Array.from(new Set(baseRatios.map(item => `${item.grade}|${item.subject}`)));
-    cutoffSubjectOptions = uniqueStr.map(str => { const [g, s] = str.split('|'); return { grade: g, subject: s }; }).sort((a,b) => String(a.grade || '').localeCompare(String(b.grade || '')) || String(a.subject || '').localeCompare(String(b.subject || '')));
+    const perfKey = `${activeCutoff.year}|${activeCutoff.semester}`;
+    let perfList = globalSettings.perfSchedules?.[perfKey] || [];
+    const formUniqueMap = new Map();
+    perfList.forEach(item => { formUniqueMap.set(`${item.grade}|${item.subject}`, { grade: item.grade, subject: item.subject }); });
+    const formCutoffs = examCutoffs.filter(c => String(c.year) === String(activeCutoff.year) && String(c.semester) === String(activeCutoff.semester) && String(c.examName) === '수행평가');
+    formCutoffs.forEach(c => { formUniqueMap.set(`${c.grade}|${c.subject}`, { grade: c.grade, subject: c.subject }); });
+    cutoffSubjectOptions = Array.from(formUniqueMap.values()).sort((a,b) => String(a.grade || '').localeCompare(String(b.grade || '')) || String(a.subject || '').localeCompare(String(b.subject || '')));
   } else {
     const formExamKey = `${activeCutoff.year}|${activeCutoff.semester}|${localCutoffExam}`;
     let formSchedule = globalSettings.schedules?.[formExamKey] || [];
@@ -525,17 +526,10 @@ export default function App() {
       });
       formSchedule = Array.from(recoveredMap.values());
     }
-    
     const formUniqueMap = new Map();
-    formSchedule.forEach(item => {
-      formUniqueMap.set(`${item.grade}|${item.subject}`, { grade: item.grade, subject: item.subject });
-    });
-
+    formSchedule.forEach(item => { formUniqueMap.set(`${item.grade}|${item.subject}`, { grade: item.grade, subject: item.subject }); });
     const formCutoffs = examCutoffs.filter(c => String(c.year) === String(activeCutoff.year) && String(c.semester) === String(activeCutoff.semester) && String(c.examName) === localCutoffExam);
-    formCutoffs.forEach(c => {
-      formUniqueMap.set(`${c.grade}|${c.subject}`, { grade: c.grade, subject: c.subject });
-    });
-
+    formCutoffs.forEach(c => { formUniqueMap.set(`${c.grade}|${c.subject}`, { grade: c.grade, subject: c.subject }); });
     cutoffSubjectOptions = Array.from(formUniqueMap.values()).sort((a,b) => String(a.grade || '').localeCompare(String(b.grade || '')) || String(a.subject || '').localeCompare(String(b.subject || '')));
   }
 
@@ -608,6 +602,7 @@ export default function App() {
     setIsSaving(false);
   };
 
+  // 💡 비율 데이터 표시 병합 로직 (중복 출력 버그 방지)
   const inputRatios = assessmentRatios.filter(r => String(r.year) === String(ratioYear) && String(r.semester) === String(ratioSem));
   let displayRatios = [];
   if (String(ratioYear) === '2026' && String(ratioSem) === '1') {
@@ -621,7 +616,7 @@ export default function App() {
   } else {
     displayRatios = [...inputRatios];
   }
-  displayRatios = [...displayRatios, ...newRatioRows.filter(r => String(r.year) === String(ratioYear) && String(r.semester) === String(ratioSem))];
+  // newRatioRows는 map에서 별도로 그리므로 displayRatios에 포함시키면 안 됩니다.
 
   const handleRatioSave = async (data, isConfirm = false, confirmName = '', isUnconfirm = false) => {
     const totalVal = String(data.total || '').trim();
@@ -706,6 +701,30 @@ export default function App() {
       const key = `${prev.activeSettings.scope.year}|${prev.activeSettings.scope.semester}|${prev.activeSettings.scope.examName}`;
       const existing = prev.schedules?.[key] || [];
       return { ...prev, schedules: { ...(prev.schedules || {}), [key]: existing.filter(item => item.id !== id) } };
+    });
+  };
+
+  // 💡 관리자 수행평가 명단 적용 함수
+  const handlePerfBulkPaste = () => {
+    if(!perfBulkInput.trim()) return;
+    const lines = perfBulkInput.split('\n');
+    const newPerf = lines.map((line, i) => {
+      const parts = line.split('\t').map(p => p.trim()).filter(Boolean);
+      if (parts.length >= 2) return { id: Date.now() + i, grade: parts[0], subject: parts[1] }; return null;
+    }).filter(Boolean);
+    setAdminData(prev => {
+      const key = `${prev.activeSettings.cutoff.year}|${prev.activeSettings.cutoff.semester}`;
+      const existing = prev.perfSchedules?.[key] || [];
+      return { ...prev, perfSchedules: { ...(prev.perfSchedules || {}), [key]: [...existing, ...newPerf] } };
+    });
+    setPerfBulkInput(''); setAdminMessage({ type: 'success', text: '수행평가 과목이 추가되었습니다. 꼭 [저장하기]를 누르세요.' }); setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000);
+  };
+
+  const removePerfItem = (id) => {
+    setAdminData(prev => {
+      const key = `${prev.activeSettings.cutoff.year}|${prev.activeSettings.cutoff.semester}`;
+      const existing = prev.perfSchedules?.[key] || [];
+      return { ...prev, perfSchedules: { ...(prev.perfSchedules || {}), [key]: existing.filter(item => item.id !== id) } };
     });
   };
 
@@ -1136,15 +1155,6 @@ export default function App() {
                 </div>
               </div>
 
-              {ratioYear === '2026' && ratioSem === '1' && currentRatios.length === 0 && displayRatios.length === 0 && (
-                <div className="mb-6 p-6 bg-amber-50 border border-amber-200 rounded-2xl text-center print:hidden">
-                  <p className="text-amber-800 font-bold mb-3">2026학년도 1학기 데이터가 아직 없습니다.</p>
-                  <button onClick={() => {}} className="bg-amber-600 text-white px-6 py-2.5 rounded-xl font-black shadow-md hover:bg-amber-700 active:scale-95 transition-all">
-                    초기 데이터는 자동으로 복원됩니다.
-                  </button>
-                </div>
-              )}
-
               <div className="w-full">
                 {[1, 2, 3].map(g => {
                   const gradeRatios = displayRatios.filter(r => String(r.grade) === String(g));
@@ -1550,6 +1560,30 @@ export default function App() {
                       <input type="text" value={adminData.activeSettings?.cutoff?.year || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, cutoff: {...p.activeSettings.cutoff, year: e.target.value}}}))} className="w-1/2 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-rose-500 outline-none" placeholder="연도"/>
                       <select value={adminData.activeSettings?.cutoff?.semester || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, cutoff: {...p.activeSettings.cutoff, semester: e.target.value}}}))} className="w-1/2 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-rose-500 outline-none"><option value="1">1학기</option><option value="2">2학기</option></select>
                     </div>
+                  </div>
+                </div>
+
+                {/* 💡 새롭게 추가된 수행평가 과목 관리 영역 */}
+                <div className="pt-4 border-t border-gray-100">
+                  <h3 className="text-lg font-black text-gray-800 mb-2 flex items-center gap-2">
+                    <ClipboardList size={20} className="text-purple-500"/> 
+                    [{adminData.activeSettings?.cutoff?.year}년 {adminData.activeSettings?.cutoff?.semester}학기] 수행평가 과목 관리
+                  </h3>
+                  <p className="text-xs text-purple-700 mb-4 font-bold bg-purple-50 inline-block px-3 py-1.5 rounded-lg border border-purple-100">
+                    💡 엑셀에서 <strong>[학년] [과목명]</strong> 2칸 형태의 표를 복사해 붙여넣으세요. (추정분할 탭에서 수행평가 입력 시 사용됩니다.)
+                  </p>
+                  <div className="mb-6 p-5 bg-rose-50/50 border border-rose-100 rounded-2xl">
+                    <textarea value={perfBulkInput} onChange={e => setPerfBulkInput(e.target.value)} className="w-full h-24 p-3 bg-white border border-rose-200 rounded-xl text-sm outline-none focus:border-rose-500 resize-none custom-scrollbar" />
+                    <button onClick={handlePerfBulkPaste} type="button" className="mt-3 px-4 py-2 bg-rose-600 text-white text-xs font-bold rounded-lg hover:bg-rose-700 transition-all shadow-sm active:scale-95">현재 학기에 수행평가 과목 일괄 추가</button>
+                  </div>
+                  <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">
+                    {(!globalSettings.perfSchedules?.[`${adminData.activeSettings?.cutoff?.year}|${adminData.activeSettings?.cutoff?.semester}`] || globalSettings.perfSchedules?.[`${adminData.activeSettings?.cutoff?.year}|${adminData.activeSettings?.cutoff?.semester}`].length === 0) && <p className="text-center text-sm text-gray-400 py-4">이 학기에 등록된 수행평가 과목이 없습니다.</p>}
+                    {(globalSettings.perfSchedules?.[`${adminData.activeSettings?.cutoff?.year}|${adminData.activeSettings?.cutoff?.semester}`] || []).map(item => (
+                      <div key={item.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-200 shadow-sm hover:border-rose-200 text-sm">
+                        <span className="font-medium text-gray-800"><strong className="w-16 inline-block text-center">{item.grade}학년</strong> | <strong className="ml-2 text-rose-700">{item.subject}</strong></span>
+                        <button onClick={() => removePerfItem(item.id)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
