@@ -342,6 +342,7 @@ export default function App() {
 
   const [globalSettings, setGlobalSettings] = useState(defaultGlobalSettings);
   
+  // States
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedTeacher, setSelectedTeacher] = useState('');
   const [signatureData, setSignatureData] = useState(null);
@@ -483,6 +484,7 @@ export default function App() {
   const viewingScopes = examScopes.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
   const viewingCutoffs = examCutoffs.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
   
+  // 시간표 복원 로직
   let scheduleToDisplay = globalSettings.schedules?.[currentExamKey];
   if (!scheduleToDisplay || scheduleToDisplay.length === 0) {
     const legacyKey = `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`;
@@ -498,6 +500,7 @@ export default function App() {
   }
   scheduleToDisplay = scheduleToDisplay || [];
 
+  // 서명용 과목명 복원 로직
   let subjectsToDisplay = Array.isArray(globalSettings.subjects) ? globalSettings.subjects.map(s => {
     const submittedTeachers = [...new Set(viewingSignatures.filter(sig => sig.subject === s.name).map(sig => sig.teacherName))];
     return { ...s, teachers: [...new Set([...(s.teachers || []), ...submittedTeachers])] };
@@ -510,6 +513,7 @@ export default function App() {
     }
   });
 
+  // 추정분할용 동적 옵션 생성 로직
   let cutoffSubjectOptions = [];
   if (localCutoffExam === '수행평가') {
     const perfKey = `${activeCutoff.year}|${activeCutoff.semester}`;
