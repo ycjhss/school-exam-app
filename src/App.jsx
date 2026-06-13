@@ -148,9 +148,14 @@ const getDisplayDate = (sig) => {
   return '';
 };
 
+// 💡 옵션 포맷터 (학기용 vs 고사용)
+const formatRatioOption = (opt) => {
+  const [y, s] = opt.split('|');
+  return `${y}년 ${s}학기`;
+};
 const formatExamOption = (opt) => {
   const [y, s, e] = opt.split('|');
-  return `${y}년 ${s}학기 ${e === 'undefined' ? '' : e}`;
+  return `${y}년 ${s}학기 ${e === 'undefined' || !e ? '' : e}`;
 };
 
 const getScopeId = (vYear, vSem, vExam, item) => {
@@ -303,6 +308,14 @@ const RatioRow = ({ item, year, sem, grade, onSave, onDelete }) => {
   );
 };
 
+// 💡 4개 업무별 독립 설정을 위한 기본 구조
+const defaultActiveSettings = {
+  ratio: { year: '2026', semester: '1' },
+  signature: { year: '2026', semester: '1', examName: '1차 정기시험', documentDate: '2026. 4. 28.' },
+  scope: { year: '2026', semester: '1', examName: '1차 정기시험' },
+  cutoff: { year: '2026', semester: '1', examName: '1차 정기시험' }
+};
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
@@ -314,18 +327,20 @@ export default function App() {
   const [pinError, setPinError] = useState(false);
 
   const [selectedSubmission, setSelectedSubmission] = useState(null); 
+  
+  // 💡 현황판 조회를 위한 콤보박스 State (비율용 vs 고사용)
   const [viewingExamKey, setViewingExamKey] = useState(''); 
+  const [viewingRatioKey, setViewingRatioKey] = useState('');
 
   const defaultGlobalSettings = {
-    year: '2026', semester: '1', examName: '1차 정기시험', documentDate: '2026. 4. 28.',
     adminPassword: '1234', 
     subjects: [
       { name: '공통국어1', teachers: ['홍길동', '이순신'] },
       { name: '한국사1', teachers: ['강감찬'] }
     ],
     checklist: defaultChecklistData,
-    examSchedule: [],
-    schedules: {} 
+    schedules: {},
+    activeSettings: defaultActiveSettings
   };
 
   const [globalSettings, setGlobalSettings] = useState(defaultGlobalSettings);
@@ -354,6 +369,7 @@ export default function App() {
 
   // Assessment Ratios State
   const [assessmentRatios, setAssessmentRatios] = useState([]);
+  // UI 입력을 위한 비율 탭의 로컬 State (관리자 설정이 기본값)
   const [ratioYear, setRatioYear] = useState('2026');
   const [ratioSem, setRatioSem] = useState('1');
   const [newRatioRows, setNewRatioRows] = useState([]);
@@ -390,13 +406,33 @@ export default function App() {
       (snap) => { 
         if (snap.exists()) {
           const data = snap.data();
-          setGlobalSettings(prev => ({ ...prev, ...data })); 
+          
+          // 💡 하위 호환성 (과거 데이터 마이그레이션)
+          if (data.year && !data.activeSettings) {
+            data.activeSettings = {
+              ratio: { year: data.year, semester: data.semester },
+              signature: { year: data.year, semester: data.semester, examName: data.examName, documentDate: data.documentDate },
+              scope: { year: data.year, semester: data.semester, examName: data.examName },
+              cutoff: { year: data.year, semester: data.semester, examName: data.examName }
+            };
+          }
+
+          const resolvedData = { ...defaultGlobalSettings, ...data };
+          setGlobalSettings(resolvedData); 
+          
           if (!isDataLoaded) {
-            setAdminData(prev => ({ ...prev, ...data }));
+            setAdminData(resolvedData);
             setIsDataLoaded(true);
-            setViewingExamKey(`${data.year || '2026'}|${data.semester || '1'}|${data.examName || '1차 정기시험'}`); 
-            setRatioYear(data.year || '2026');
-            setRatioSem(data.semester || '1');
+            
+            // 현황판 조회용 초기값 세팅
+            const sRatio = resolvedData.activeSettings.ratio;
+            const sExam = resolvedData.activeSettings.signature;
+            setViewingRatioKey(`${sRatio.year}|${sRatio.semester}`);
+            setViewingExamKey(`${sExam.year}|${sExam.semester}|${sExam.examName}`);
+            
+            // 비율 탭 입력용 초기값 세팅
+            setRatioYear(sRatio.year);
+            setRatioSem(sRatio.semester);
           }
         } else { setIsDataLoaded(true); }
       },
@@ -421,13 +457,19 @@ export default function App() {
     else { setPinError(true); setPinInput(''); }
   };
 
+  // 💡 모듈별 활성 설정 추출
+  const activeRatio = globalSettings.activeSettings?.ratio || defaultActiveSettings.ratio;
+  const activeSig = globalSettings.activeSettings?.signature || defaultActiveSettings.signature;
+  const activeScope = globalSettings.activeSettings?.scope || defaultActiveSettings.scope;
+  const activeCutoff = globalSettings.activeSettings?.cutoff || defaultActiveSettings.cutoff;
+
   const handleTeacherSubmit = async (e) => {
     e.preventDefault();
     if (!signatureData || !user) return;
     setIsSaving(true); setSubmitError('');
     try {
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'individualSignatures'), {
-        year: String(globalSettings.year), semester: String(globalSettings.semester), examName: String(globalSettings.examName),
+        year: String(activeSig.year), semester: String(activeSig.semester), examName: String(activeSig.examName),
         subject: selectedSubject, teacherName: selectedTeacher, signatureData, checklistSnapshot: globalSettings.checklist || defaultChecklistData, 
         createdAt: serverTimestamp(), uid: user.uid
       });
@@ -450,10 +492,10 @@ export default function App() {
     if (!selectedScheduleItem) { alert("과목을 선택해주세요."); return; }
     setIsSaving(true);
     try {
-      const vYear = String(globalSettings.year); const vSem = String(globalSettings.semester); const vExam = String(globalSettings.examName);
-      const docId = getScopeId(vYear, vSem, vExam, selectedScheduleItem);
+      const docId = getScopeId(String(activeScope.year), String(activeScope.semester), String(activeScope.examName), selectedScheduleItem);
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examScopes', docId), {
-        year: vYear, semester: vSem, examName: vExam, date: selectedScheduleItem.date, grade: selectedScheduleItem.grade,
+        year: String(activeScope.year), semester: String(activeScope.semester), examName: String(activeScope.examName), 
+        date: selectedScheduleItem.date, grade: selectedScheduleItem.grade,
         period: selectedScheduleItem.period, subject: selectedScheduleItem.subject, scopeText: scopeInputText, teacherName: scopeInputTeacher.trim(),
         updatedAt: serverTimestamp()
       });
@@ -467,9 +509,8 @@ export default function App() {
     if (!cutoffSubjectGrade) { alert("과목을 선택해주세요."); return; }
     setIsSaving(true);
     try {
-      const vYear = String(globalSettings.year); const vSem = String(globalSettings.semester); const vExam = String(globalSettings.examName);
       const [g, s] = cutoffSubjectGrade.split('|');
-      const docId = `${vYear}_${vSem}_${vExam}_${g}_${s}`.replace(/\s/g, '');
+      const docId = `${activeCutoff.year}_${activeCutoff.semester}_${activeCutoff.examName}_${g}_${s}`.replace(/\s/g, '');
       const isAllEmpty = !cutoffScores.ab && !cutoffScores.bc && !cutoffScores.cd && !cutoffScores.de && !cutoffScores.ei;
 
       if (isAllEmpty) {
@@ -477,7 +518,7 @@ export default function App() {
         alert("입력된 점수가 없어 기존 기록이 완전히 삭제(초기화)되었습니다.");
       } else {
         await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examCutoffs', docId), {
-          year: vYear, semester: vSem, examName: vExam, grade: g, subject: s,
+          year: String(activeCutoff.year), semester: String(activeCutoff.semester), examName: String(activeCutoff.examName), grade: g, subject: s,
           ab: cutoffScores.ab, bc: cutoffScores.bc, cd: cutoffScores.cd, de: cutoffScores.de, ei: cutoffScores.ei,
           teacherName: cutoffTeacher.trim(), updatedAt: serverTimestamp()
         });
@@ -488,7 +529,7 @@ export default function App() {
     setIsSaving(false);
   };
 
-  // 비율 데이터 필터 및 병합 로직
+  // 💡 비율 탭의 입력용 데이터 로직
   const currentRatios = assessmentRatios.filter(r => String(r.year) === String(ratioYear) && String(r.semester) === String(ratioSem));
   let displayRatios = [];
   if (String(ratioYear) === '2026' && String(ratioSem) === '1') {
@@ -510,14 +551,8 @@ export default function App() {
       alert(`입력하신 비율의 계(총합)가 100이 아닙니다! (현재: ${totalVal})\n100%가 되도록 수정한 후 저장/확인해 주세요.`);
       return;
     }
-    if (isConfirm && !confirmName.trim()) {
-      alert("확인자 성함을 입력해주세요.");
-      return;
-    }
-    if (!data.subject) {
-      alert("과목명을 입력해야 합니다.");
-      return;
-    }
+    if (isConfirm && !confirmName.trim()) { alert("확인자 성함을 입력해주세요."); return; }
+    if (!data.subject) { alert("과목명을 입력해야 합니다."); return; }
 
     try {
       const docId = `${data.year}_${data.semester}_${data.grade}_${data.subject}`.replace(/\s/g, '');
@@ -528,53 +563,28 @@ export default function App() {
         updatedAt: serverTimestamp()
       };
       
-      delete finalData.isUnsavedDefault;
-      delete finalData.id;
+      delete finalData.isUnsavedDefault; delete finalData.id;
 
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assessmentRatios', docId), finalData);
       setNewRatioRows(prev => prev.filter(r => r.id !== data.id));
       
-      if (isConfirm) alert("확인 완료되었습니다.");
-      else if (isUnconfirm) alert("확인이 취소되었습니다.");
-      else alert("저장되었습니다.");
-    } catch (e) {
-      alert("처리 중 오류가 발생했습니다.");
-    }
+      if (isConfirm) alert("확인 완료되었습니다."); else if (isUnconfirm) alert("확인이 취소되었습니다."); else alert("저장되었습니다.");
+    } catch (e) { alert("처리 중 오류가 발생했습니다."); }
   };
 
   const handleRatioDelete = async (id) => {
     if (!confirm("이 과목을 삭제하시겠습니까? (초기 데이터는 새로고침 시 다시 나타납니다)")) return;
-    if (id.startsWith('new_')) {
-      setNewRatioRows(prev => prev.filter(r => r.id !== id));
-    } else if (!id.startsWith('def_')) {
-      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assessmentRatios', id));
-    }
+    if (id.startsWith('new_')) setNewRatioRows(prev => prev.filter(r => r.id !== id));
+    else if (!id.startsWith('def_')) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assessmentRatios', id));
   };
 
+  // Admin Handlers
   const handleAdminSave = async () => {
     try {
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), adminData);
       setAdminMessage({ type: 'success', text: '설정이 안전하게 저장되었습니다.' });
-      setViewingExamKey(`${adminData.year}|${adminData.semester}|${adminData.examName}`);
       setTimeout(() => setAdminMessage({ type: '', text: '' }), 3000);
     } catch (e) { setAdminMessage({ type: 'error', text: '저장에 실패했습니다.' }); setTimeout(() => setAdminMessage({ type: '', text: '' }), 5000); }
-  };
-
-  const executeDeleteExamRecords = async (examKey) => {
-    const [dYear, dSem, dExam] = examKey.split('|');
-    try {
-      const sigsToDelete = allSignatures.filter(s => String(s.year) === dYear && String(s.semester) === dSem && String(s.examName) === dExam);
-      for (const sig of sigsToDelete) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'individualSignatures', sig.id));
-      const printsToDelete = printStatuses.filter(p => String(p.year) === dYear && String(p.semester) === dSem && String(p.examName) === dExam);
-      for (const p of printsToDelete) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'printStatuses', p.id));
-      const scopesToDelete = examScopes.filter(s => String(s.year) === dYear && String(s.semester) === dSem && String(s.examName) === dExam);
-      for (const sc of scopesToDelete) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examScopes', sc.id));
-      const cutoffsToDelete = examCutoffs.filter(s => String(s.year) === dYear && String(s.semester) === dSem && String(s.examName) === dExam);
-      for (const cu of cutoffsToDelete) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examCutoffs', cu.id));
-
-      setDeleteExamKey(null); setAdminMessage({ type: 'success', text: `과거 모든 기록이 영구 삭제되었습니다.` });
-      setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000);
-    } catch (e) { setAdminMessage({ type: 'error', text: '삭제 중 오류가 발생했습니다.' }); setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000); }
   };
 
   const handleBulkPaste = () => {
@@ -605,8 +615,8 @@ export default function App() {
     }).filter(Boolean);
     
     setAdminData(prev => {
-      const key = `${prev.year}|${prev.semester}|${prev.examName}`;
-      const existing = prev.schedules?.[key] || (prev.year === globalSettings.year && prev.semester === globalSettings.semester && prev.examName === globalSettings.examName ? (prev.examSchedule || []) : []);
+      const key = `${prev.activeSettings.scope.year}|${prev.activeSettings.scope.semester}|${prev.activeSettings.scope.examName}`;
+      const existing = prev.schedules?.[key] || [];
       return { ...prev, schedules: { ...(prev.schedules || {}), [key]: [...existing, ...newSchedule] } };
     });
     setScheduleBulkInput(''); setAdminMessage({ type: 'success', text: '해당 시험에 시간표 추가됨. 꼭 [저장하기]를 누르세요.' });
@@ -615,46 +625,52 @@ export default function App() {
 
   const removeScheduleItem = (id) => {
     setAdminData(prev => {
-      const key = `${prev.year}|${prev.semester}|${prev.examName}`;
-      const existing = prev.schedules?.[key] || (prev.year === globalSettings.year && prev.semester === globalSettings.semester && prev.examName === globalSettings.examName ? (prev.examSchedule || []) : []);
+      const key = `${prev.activeSettings.scope.year}|${prev.activeSettings.scope.semester}|${prev.activeSettings.scope.examName}`;
+      const existing = prev.schedules?.[key] || [];
       return { ...prev, schedules: { ...(prev.schedules || {}), [key]: existing.filter(item => item.id !== id) } };
     });
   };
 
-  const allExamKeys = new Set([
+  // 💡 현황판 조회를 위한 콤보박스 옵션 구성 (비율 vs 그외 분리)
+  const ratioKeys = new Set(assessmentRatios.map(s => `${s.year}|${s.semester}`));
+  ratioKeys.add(`${activeRatio.year}|${activeRatio.semester}`);
+  ratioKeys.add('2026|1'); // 기본 내장 데이터 보장
+  const ratioOptions = Array.from(ratioKeys).sort((a,b) => b.localeCompare(a));
+
+  const examKeys = new Set([
     ...allSignatures.map(s => `${s.year}|${s.semester}|${s.examName}`),
     ...examScopes.map(s => `${s.year}|${s.semester}|${s.examName}`),
-    ...examCutoffs.map(s => `${s.year}|${s.semester}|${s.examName}`),
-    ...assessmentRatios.map(s => `${s.year}|${s.semester}|${globalSettings.examName || '1차 정기시험'}`)
+    ...examCutoffs.map(s => `${s.year}|${s.semester}|${s.examName}`)
   ]);
-  allExamKeys.add(`${globalSettings.year || '2026'}|${globalSettings.semester || '1'}|${globalSettings.examName || '1차 정기시험'}`);
-  const examOptions = Array.from(allExamKeys).sort((a,b) => b.localeCompare(a)); 
+  examKeys.add(`${activeSig.year}|${activeSig.semester}|${activeSig.examName}`);
+  examKeys.add(`${activeScope.year}|${activeScope.semester}|${activeScope.examName}`);
+  examKeys.add(`${activeCutoff.year}|${activeCutoff.semester}|${activeCutoff.examName}`);
+  const examOptions = Array.from(examKeys).sort((a,b) => b.localeCompare(a)); 
 
-  const [vYear, vSem, vExam] = (viewingExamKey || `${globalSettings.year || '2026'}|${globalSettings.semester || '1'}|${globalSettings.examName || '1차 정기시험'}`).split('|');
-  const isViewingCurrent = viewingExamKey === `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`;
+  // 현재 현황판에서 선택된 값 분석
+  const [vRatioYear, vRatioSem] = (viewingRatioKey || `${activeRatio.year}|${activeRatio.semester}`).split('|');
+  const [vYear, vSem, vExam] = (viewingExamKey || `${activeSig.year}|${activeSig.semester}|${activeSig.examName}`).split('|');
   
+  // 데이터 필터링
   const viewingSignatures = allSignatures.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
   const viewingScopes = examScopes.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
   const viewingCutoffs = examCutoffs.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
   
-  let subjectsToDisplay = Array.isArray(globalSettings.subjects) ? [...globalSettings.subjects] : [];
-  if (!isViewingCurrent) {
-    const pastSubjects = [...new Set(viewingSignatures.map(s => s.subject))];
-    const historicalSubjects = pastSubjects.map(ps => {
-      const existing = subjectsToDisplay.find(s => s.name === ps);
-      const submittedTeachers = [...new Set(viewingSignatures.filter(s => s.subject === ps).map(s => s.teacherName))];
-      return existing ? { ...existing, teachers: [...new Set([...(existing.teachers || []), ...submittedTeachers])] } : { name: ps, teachers: submittedTeachers };
-    });
-    subjectsToDisplay = historicalSubjects;
-  }
+  const subjectsToDisplay = Array.isArray(globalSettings.subjects) ? globalSettings.subjects.map(s => {
+    const submittedTeachers = [...new Set(viewingSignatures.filter(sig => sig.subject === s.name).map(sig => sig.teacherName))];
+    return { ...s, teachers: [...new Set([...(s.teachers || []), ...submittedTeachers])] };
+  }) : [];
 
-  const scheduleToDisplay = globalSettings.schedules?.[viewingExamKey] || (isViewingCurrent ? (globalSettings.examSchedule || []) : []) || [];
+  const scopeKey = `${activeScope.year}|${activeScope.semester}|${activeScope.examName}`;
+  const scheduleToDisplay = globalSettings.schedules?.[viewingExamKey] || (viewingExamKey === scopeKey ? (globalSettings.schedules?.[scopeKey] || []) : []) || [];
+  
   const uniqueSubjectGrades = Array.from(new Set(scheduleToDisplay.map(item => `${item.grade}|${item.subject}`)))
     .map(str => { const [g, s] = str.split('|'); return { grade: g, subject: s }; })
     .sort((a,b) => a.grade.localeCompare(b.grade) || a.subject.localeCompare(b.subject));
 
   const escapeCSV = (value) => { if (value === null || value === undefined) return ''; return `"${String(value).replace(/"/g, '""')}"`; };
 
+  // 💡 Export CSV 함수들
   const handleExportCSV = () => {
     let csv = "\uFEFF과목명,교사명,제출상태,서명(클라우드기록)시간\n";
     subjectsToDisplay.forEach(subject => {
@@ -698,9 +714,9 @@ export default function App() {
 
   const handleExportRatioCSV = () => {
     let csv = "\uFEFF학년,과목(학점),1차 정기시험,2차 정기시험,수행평가(1),수행평가(2),수행평가(3),수행평가(4),수행평가(5),논술형 비율(%),계,최종확인\n";
-    const currentStatusRatios = assessmentRatios.filter(r => String(r.year) === String(vYear) && String(r.semester) === String(vSem));
+    const currentStatusRatios = assessmentRatios.filter(r => String(r.year) === String(vRatioYear) && String(r.semester) === String(vRatioSem));
     let exportRatios = [];
-    if (String(vYear) === '2026' && String(vSem) === '1') {
+    if (String(vRatioYear) === '2026' && String(vRatioSem) === '1') {
       exportRatios = defaultAssessment2026S1.map(def => {
         const found = currentStatusRatios.find(r => r.subject === def.subject && r.grade === def.grade);
         return found ? found : { ...def, year: '2026', semester: '1' };
@@ -721,7 +737,7 @@ export default function App() {
     });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url;
-    link.download = `평가비율표_${vYear}_${vSem}학기.csv`; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
+    link.download = `평가비율표_${vRatioYear}_${vRatioSem}학기.csv`; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
   };
 
   const togglePrintStatus = async (subjectName, isCurrentlyPrinted) => {
@@ -741,6 +757,7 @@ export default function App() {
   const removeChecklistItem = (id) => { setAdminData(prev => ({ ...prev, checklist: (prev.checklist || defaultChecklistData).filter(item => item.id !== id) })); };
   const updateChecklistStatus = (id, newStatus) => { setAdminData(prev => ({ ...prev, checklist: (prev.checklist || defaultChecklistData).map(item => item.id === id ? { ...item, status: newStatus } : item ) })); };
 
+  // UI 조각 렌더링
   const renderScheduleTable = (isPrintView = false) => {
     if (scheduleToDisplay.length === 0) return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">등록된 시험 시간표가 없습니다.</div>;
     const dateSpans = {}; const gradeSpans = {};
@@ -837,10 +854,10 @@ export default function App() {
   };
 
   const renderReadOnlyRatioTable = () => {
-    const currentStatusRatios = assessmentRatios.filter(r => String(r.year) === String(vYear) && String(r.semester) === String(vSem));
+    const currentStatusRatios = assessmentRatios.filter(r => String(r.year) === String(vRatioYear) && String(r.semester) === String(vRatioSem));
     let displayStatusRatios = [];
 
-    if (String(vYear) === '2026' && String(vSem) === '1') {
+    if (String(vRatioYear) === '2026' && String(vRatioSem) === '1') {
       displayStatusRatios = defaultAssessment2026S1.map(def => {
         const found = currentStatusRatios.find(r => r.subject === def.subject && r.grade === def.grade);
         return found ? found : { ...def, year: '2026', semester: '1' };
@@ -853,7 +870,7 @@ export default function App() {
     }
 
     if (displayStatusRatios.length === 0) {
-      return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">해당 학기({vYear}년 {vSem}학기)에 입력된 평가 비율 데이터가 없습니다.</div>;
+      return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">해당 학기({vRatioYear}년 {vRatioSem}학기)에 입력된 평가 비율 데이터가 없습니다.</div>;
     }
 
     return (
@@ -937,7 +954,7 @@ export default function App() {
                   </tbody>
                 </table>
                 <div className="print-signature-area text-center mt-12 print:mt-16">
-                  <p className="text-lg font-bold mb-6">위 항목을 모두 확인하고 이상 없음을 확인합니다.</p><p className="text-xl font-bold tracking-widest mb-10">{globalSettings.documentDate}</p>
+                  <p className="text-lg font-bold mb-6">위 항목을 모두 확인하고 이상 없음을 확인합니다.</p><p className="text-xl font-bold tracking-widest mb-10">{activeSig.documentDate}</p>
                   <div className={`print-signature-list signature-count-${Math.min(selectedSubmission.length, 6)} flex flex-col items-end text-xl font-bold pr-4 gap-y-6 mt-4`}>
                     {selectedSubmission.map((sub, idx) => (
                       <div key={idx} className="print-signature-row flex items-center">
@@ -1009,12 +1026,9 @@ export default function App() {
           {viewMode === 'home' && (
             <div className="w-full max-w-6xl mt-2 sm:mt-8 animate-fade-in flex flex-col items-center px-2">
               <div className="bg-white rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-6 md:p-10 mb-8 text-center w-full">
-                <div className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2 rounded-full text-xs font-black mb-4 border border-blue-100">
-                  <FileText size={14}/> {String(globalSettings.year)}년 {String(globalSettings.semester)}학기 {String(globalSettings.examName)}
-                </div>
                 <h2 className="text-2xl md:text-4xl font-black text-gray-900 tracking-tight mb-3">정기고사 평가자료 관리</h2>
                 <p className="text-gray-500 text-sm md:text-base font-medium leading-relaxed">
-                  원하시는 업무를 선택하여 진행해 주세요.
+                  선생님, 환영합니다. 원하시는 업무를 선택하여 진행해 주세요.
                 </p>
               </div>
 
@@ -1054,7 +1068,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 💡 평가 비율 입력 화면 (스프레드시트 엑셀식 입력) */}
+          {/* 평가 비율 입력 화면 */}
           {viewMode === 'ratio' && (
             <div className="w-full max-w-[1200px] bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-6 md:p-10 animate-fade-in mt-4">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-gray-100 pb-6">
@@ -1151,7 +1165,7 @@ export default function App() {
               </div>
               <div className="bg-gradient-to-br from-blue-600 to-blue-800 text-white p-8 text-center relative overflow-hidden mt-4">
                 <h2 className="text-2xl font-black mb-2 relative z-10">출제 검토 확인서</h2>
-                <p className="text-blue-100 text-sm font-medium opacity-90 relative z-10">{String(globalSettings.year)}년 {String(globalSettings.semester)}학기 {String(globalSettings.examName)}</p>
+                <p className="text-blue-100 text-sm font-medium opacity-90 relative z-10">{String(activeSig.year)}년 {String(activeSig.semester)}학기 {String(activeSig.examName)}</p>
               </div>
               
               {saveSuccess ? (
@@ -1239,7 +1253,7 @@ export default function App() {
                 <div>
                   <button type="button" onClick={() => setViewMode('home')} className="mb-3 text-xs font-black text-gray-500 hover:text-indigo-600 bg-white hover:bg-indigo-50 border border-gray-200 hover:border-indigo-200 px-3 py-2 rounded-xl transition-all shadow-sm">← 첫 화면으로</button>
                   <h2 className="text-2xl font-black text-gray-800 flex items-center gap-2"><CalendarDays className="text-indigo-600"/> 시험 범위 입력</h2>
-                  <p className="text-gray-500 text-sm font-medium mt-1">담당 과목의 [입력/수정] 버튼을 눌러주세요.</p>
+                  <p className="text-gray-500 text-sm font-medium mt-1">담당 과목의 [입력/수정] 버튼을 눌러주세요. ({activeScope.year}년 {activeScope.semester}학기 {activeScope.examName})</p>
                 </div>
               </div>
               {renderScheduleTable(false)}
@@ -1254,7 +1268,7 @@ export default function App() {
               </div>
               <div className="bg-gradient-to-br from-rose-600 to-rose-800 text-white p-8 text-center relative overflow-hidden mt-4">
                 <h2 className="text-2xl font-black mb-2 relative z-10 flex justify-center items-center gap-2"><Target size={24}/> 추정분할 점수 입력</h2>
-                <p className="text-rose-100 text-sm font-medium opacity-90 relative z-10">추정분할 고정 과목만 입력해 주세요.</p>
+                <p className="text-rose-100 text-sm font-medium opacity-90 relative z-10">{activeCutoff.year}년 {activeCutoff.semester}학기 {activeCutoff.examName}</p>
               </div>
               <form onSubmit={handleCutoffSubmit} className="p-8 space-y-5">
                 <div className="relative group">
@@ -1286,7 +1300,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 💡 관리자 제출 현황 화면 (비율 및 수행 현황 통합) */}
+          {/* 제출 현황 화면 */}
           {viewMode === 'status' && (
             <div className="print-status-page w-full max-w-5xl bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-6 md:p-10 animate-fade-in mt-4 print:shadow-none print:p-0 print:mt-0 print:border-none print:bg-transparent">
               
@@ -1307,9 +1321,15 @@ export default function App() {
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 self-end md:self-center">
                   <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 p-1 rounded-xl">
                     <History size={16} className="text-gray-400 ml-2"/>
-                    <select value={viewingExamKey} onChange={(e) => setViewingExamKey(e.target.value)} className="bg-transparent p-2 text-sm font-bold text-gray-700 outline-none pr-4">
-                      {examOptions.map(opt => <option key={opt} value={opt}>{formatExamOption(opt)}</option>)}
-                    </select>
+                    {statusTab === 'ratio' ? (
+                      <select value={viewingRatioKey} onChange={(e) => setViewingRatioKey(e.target.value)} className="bg-transparent p-2 text-sm font-bold text-gray-700 outline-none pr-4">
+                        {ratioOptions.map(opt => <option key={opt} value={opt}>{formatRatioOption(opt)}</option>)}
+                      </select>
+                    ) : (
+                      <select value={viewingExamKey} onChange={(e) => setViewingExamKey(e.target.value)} className="bg-transparent p-2 text-sm font-bold text-gray-700 outline-none pr-4">
+                        {examOptions.map(opt => <option key={opt} value={opt}>{formatExamOption(opt)}</option>)}
+                      </select>
+                    )}
                   </div>
 
                   <div className="flex gap-2">
@@ -1322,13 +1342,12 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 💡 비율 읽기 전용 모드 렌더링 (제출 현황) */}
               {statusTab === 'ratio' && (
                 <div className="animate-fade-in print:block">
                   <div className="mb-6 text-center text-lg font-black text-amber-800 bg-amber-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
-                    [평가 비율 및 수행 현황] {vYear}학년도 {vSem}학기
+                    [평가 비율 및 수행 현황] {vRatioYear}학년도 {vRatioSem}학기
                   </div>
-                  <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-2xl font-black tracking-widest">{vYear}학년도 {vSem}학기 과목별 정기시험 및 수행평가 비율</h2></div>
+                  <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-2xl font-black tracking-widest">{vRatioYear}학년도 {vRatioSem}학기 과목별 정기시험 및 수행평가 비율</h2></div>
                   {renderReadOnlyRatioTable()}
                 </div>
               )}
@@ -1336,7 +1355,7 @@ export default function App() {
               {statusTab === 'signature' && (
                 <div className="animate-fade-in print:block">
                   <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
-                    [출제 검토 서명 현황] {formatExamOption(viewingExamKey || `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`)}
+                    [출제 검토 서명 현황] {formatExamOption(viewingExamKey)}
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 print:grid-cols-2">
                     {subjectsToDisplay.map(subject => {
@@ -1399,7 +1418,7 @@ export default function App() {
               {statusTab === 'scope' && (
                 <div className="animate-fade-in print:block">
                   <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
-                    [시험 범위표] {formatExamOption(viewingExamKey || `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`)}
+                    [시험 범위표] {formatExamOption(viewingExamKey)}
                   </div>
                   <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-3xl font-black tracking-widest">{vYear}학년도 {vSem}학기 {vExam} 시험 범위</h2></div>
                   {renderScheduleTable(true)}
@@ -1409,7 +1428,7 @@ export default function App() {
               {statusTab === 'cutoff' && (
                 <div className="animate-fade-in print:block">
                   <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
-                    [추정분할 점수 현황] {formatExamOption(viewingExamKey || `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`)}
+                    [추정분할 점수 현황] {formatExamOption(viewingExamKey)}
                   </div>
                   <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-3xl font-black tracking-widest">{vYear}학년도 {vSem}학기 {vExam} 추정분할 점수</h2></div>
                   {renderCutoffTable(true)}
@@ -1418,7 +1437,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 관리자 설정 화면 */}
+          {/* 💡 관리자 설정 화면 (4등분 독립 셋팅 적용) */}
           {viewMode === 'admin' && !isAdminUnlocked && (
             <div className="w-full max-w-sm bg-white rounded-[2rem] shadow-xl p-8 mt-12 animate-fade-in text-center border border-gray-100 print:hidden">
               <div className="bg-blue-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><Lock className="text-blue-500" size={28}/></div>
@@ -1432,43 +1451,98 @@ export default function App() {
           )}
           
           {viewMode === 'admin' && isAdminUnlocked && (
-            <div className="w-full max-w-3xl bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-6 md:p-10 animate-fade-in mt-4 print:hidden">
+            <div className="w-full max-w-5xl bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-6 md:p-10 animate-fade-in mt-4 print:hidden">
               <div className="flex justify-between items-start mb-8 border-b border-gray-100 pb-6">
                 <div className="flex items-center gap-3">
                   <div className="bg-purple-100 p-3 rounded-2xl"><Settings className="text-purple-600" size={24}/></div>
-                  <div><h2 className="text-2xl font-black text-gray-800">전체 환경 설정</h2><p className="text-gray-500 text-sm font-medium">학교의 시험 정보와 과목/교사를 보관합니다.</p></div>
+                  <div><h2 className="text-2xl font-black text-gray-800">전체 환경 설정</h2><p className="text-gray-500 text-sm font-medium">4가지 업무별로 연도와 학기를 독립적으로 셋팅할 수 있습니다.</p></div>
                 </div>
                 <button onClick={() => setIsAdminUnlocked(false)} className="text-xs text-gray-400 flex items-center gap-1 font-bold hover:text-gray-600"><Lock size={12}/> 잠그기</button>
               </div>
 
               {adminMessage.text && ( <div className={`p-4 rounded-2xl mb-6 text-sm font-bold flex items-center gap-2 ${adminMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{adminMessage.type === 'success' ? <CheckCircle size={18}/> : <AlertCircle size={18}/>}{adminMessage.text}</div> )}
 
-              <div className="space-y-8">
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                  <div className="md:col-span-1"><label className="block text-[10px] font-black text-gray-500 mb-2">연도</label><input type="text" value={adminData.year} onChange={e=>setAdminData({...adminData, year: e.target.value})} className="w-full p-2.5 bg-gray-50 border-2 border-gray-100 rounded-xl text-center text-sm font-bold focus:border-purple-500 outline-none"/></div>
-                  <div className="md:col-span-1"><label className="block text-[10px] font-black text-gray-500 mb-2">학기</label><input type="text" value={adminData.semester} onChange={e=>setAdminData({...adminData, semester: e.target.value})} className="w-full p-2.5 bg-gray-50 border-2 border-gray-100 rounded-xl text-center text-sm font-bold focus:border-purple-500 outline-none"/></div>
-                  <div className="md:col-span-1"><label className="block text-[10px] font-black text-gray-500 mb-2">고사명 (예: 중간고사)</label><input type="text" value={adminData.examName} onChange={e=>setAdminData({...adminData, examName: e.target.value})} className="w-full p-2.5 bg-gray-50 border-2 border-gray-100 rounded-xl text-center text-sm font-bold focus:border-purple-500 outline-none"/></div>
-                  <div className="md:col-span-1"><label className="block text-[10px] font-black text-gray-500 mb-2">출력용 날짜</label><input type="text" value={adminData.documentDate} onChange={e=>setAdminData({...adminData, documentDate: e.target.value})} className="w-full p-2.5 bg-gray-50 border-2 border-gray-100 rounded-xl text-center text-sm font-bold focus:border-purple-500 outline-none"/></div>
-                  <div className="col-span-2 md:col-span-1"><label className="block text-[10px] font-black text-purple-600 mb-2">관리자 비밀번호</label><input type="text" value={adminData.adminPassword || '1234'} onChange={e=>setAdminData({...adminData, adminPassword: e.target.value})} className="w-full p-2.5 bg-purple-50 border-2 border-purple-100 text-purple-700 rounded-xl text-center text-sm font-black focus:border-purple-500 outline-none"/></div>
+              <div className="space-y-10">
+                {/* 1. 업무별 독립 세팅 (4분할) */}
+                <div>
+                  <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
+                    <Target size={20} className="text-purple-500"/> 업무별 진행 시기 세팅
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    {/* 비율/수행 설정 */}
+                    <div className="bg-amber-50/40 border border-amber-200 rounded-2xl p-4">
+                      <div className="flex items-center gap-2 mb-3"><ClipboardList size={16} className="text-amber-600"/><h4 className="font-bold text-amber-900 text-sm">평가 비율 및 수행평가</h4></div>
+                      <div className="flex gap-2">
+                        <input type="text" value={adminData.activeSettings?.ratio?.year || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, ratio: {...p.activeSettings.ratio, year: e.target.value}}}))} className="w-1/2 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-amber-500 outline-none" placeholder="연도 (예: 2026)"/>
+                        <select value={adminData.activeSettings?.ratio?.semester || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, ratio: {...p.activeSettings.ratio, semester: e.target.value}}}))} className="w-1/2 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-amber-500 outline-none">
+                          <option value="1">1학기</option><option value="2">2학기</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* 출제서명 설정 */}
+                    <div className="bg-blue-50/40 border border-blue-200 rounded-2xl p-4">
+                      <div className="flex items-center gap-2 mb-3"><Edit2 size={16} className="text-blue-600"/><h4 className="font-bold text-blue-900 text-sm">출제 서명</h4></div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input type="text" value={adminData.activeSettings?.signature?.year || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, signature: {...p.activeSettings.signature, year: e.target.value}}}))} className="p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-blue-500 outline-none" placeholder="연도"/>
+                        <select value={adminData.activeSettings?.signature?.semester || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, signature: {...p.activeSettings.signature, semester: e.target.value}}}))} className="p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-blue-500 outline-none">
+                          <option value="1">1학기</option><option value="2">2학기</option>
+                        </select>
+                        <input type="text" value={adminData.activeSettings?.signature?.examName || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, signature: {...p.activeSettings.signature, examName: e.target.value}}}))} className="p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-blue-500 outline-none" placeholder="고사명 (예: 1차)"/>
+                        <input type="text" value={adminData.activeSettings?.signature?.documentDate || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, signature: {...p.activeSettings.signature, documentDate: e.target.value}}}))} className="p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-blue-500 outline-none" placeholder="출력용 날짜"/>
+                      </div>
+                    </div>
+
+                    {/* 시험범위 설정 */}
+                    <div className="bg-indigo-50/40 border border-indigo-200 rounded-2xl p-4">
+                      <div className="flex items-center gap-2 mb-3"><CalendarDays size={16} className="text-indigo-600"/><h4 className="font-bold text-indigo-900 text-sm">시험 범위 입력</h4></div>
+                      <div className="flex gap-2">
+                        <input type="text" value={adminData.activeSettings?.scope?.year || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, scope: {...p.activeSettings.scope, year: e.target.value}}}))} className="w-1/3 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-indigo-500 outline-none" placeholder="연도"/>
+                        <select value={adminData.activeSettings?.scope?.semester || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, scope: {...p.activeSettings.scope, semester: e.target.value}}}))} className="w-1/3 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-indigo-500 outline-none">
+                          <option value="1">1학기</option><option value="2">2학기</option>
+                        </select>
+                        <input type="text" value={adminData.activeSettings?.scope?.examName || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, scope: {...p.activeSettings.scope, examName: e.target.value}}}))} className="w-1/3 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-indigo-500 outline-none" placeholder="고사명"/>
+                      </div>
+                    </div>
+
+                    {/* 추정분할 설정 */}
+                    <div className="bg-rose-50/40 border border-rose-200 rounded-2xl p-4">
+                      <div className="flex items-center gap-2 mb-3"><Target size={16} className="text-rose-600"/><h4 className="font-bold text-rose-900 text-sm">추정분할 점수</h4></div>
+                      <div className="flex gap-2">
+                        <input type="text" value={adminData.activeSettings?.cutoff?.year || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, cutoff: {...p.activeSettings.cutoff, year: e.target.value}}}))} className="w-1/3 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-rose-500 outline-none" placeholder="연도"/>
+                        <select value={adminData.activeSettings?.cutoff?.semester || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, cutoff: {...p.activeSettings.cutoff, semester: e.target.value}}}))} className="w-1/3 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-rose-500 outline-none">
+                          <option value="1">1학기</option><option value="2">2학기</option>
+                        </select>
+                        <input type="text" value={adminData.activeSettings?.cutoff?.examName || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, cutoff: {...p.activeSettings.cutoff, examName: e.target.value}}}))} className="w-1/3 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-rose-500 outline-none" placeholder="고사명(또는 수행)"/>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 flex items-center justify-between bg-purple-50 p-3 rounded-xl border border-purple-200">
+                    <label className="text-xs font-bold text-purple-800 ml-2">관리자 비밀번호 변경</label>
+                    <input type="text" value={adminData.adminPassword || '1234'} onChange={e=>setAdminData({...adminData, adminPassword: e.target.value})} className="w-32 p-2 bg-white border border-purple-200 text-purple-700 rounded-lg text-center text-sm font-black focus:border-purple-500 outline-none"/>
+                  </div>
                 </div>
 
+                {/* 2. 시험 시간표 설정 (시험 범위 세팅과 연동) */}
                 <div className="pt-4 border-t border-gray-100">
                   <h3 className="text-lg font-black text-gray-800 mb-2 flex items-center gap-2">
                     <CalendarDays size={20} className="text-purple-500"/> 
-                    [{adminData.year}년 {adminData.semester}학기 {adminData.examName}] 시간표 관리
+                    [{adminData.activeSettings?.scope?.year}년 {adminData.activeSettings?.scope?.semester}학기 {adminData.activeSettings?.scope?.examName}] 시간표 관리
                   </h3>
                   <p className="text-xs text-purple-700 mb-4 font-bold bg-purple-50 inline-block px-3 py-1.5 rounded-lg border border-purple-100">
-                    💡 위에서 설정한 연도/학기/고사명을 변경하면, 해당 시험에 묶인 시간표로 즉시 전환됩니다.
+                    💡 위쪽의 [시험 범위 입력] 세팅을 변경하시면, 해당 고사에 매칭되는 시간표로 즉시 전환됩니다.
                   </p>
                   <div className="mb-6 p-5 bg-indigo-50/50 border border-indigo-100 rounded-2xl">
                     <h4 className="text-sm font-black text-indigo-900 mb-2 flex items-center gap-2"><FileText size={16}/> 엑셀 시간표 대량 붙여넣기</h4>
                     <p className="text-xs text-indigo-700 mb-3 opacity-80 leading-relaxed">엑셀에서 <strong>[일자] [학년] [교시] [과목]</strong> 4칸 형태의 표를 복사해 붙여넣으세요.</p>
                     <textarea value={scheduleBulkInput} onChange={e => setScheduleBulkInput(e.target.value)} className="w-full h-24 p-3 bg-white border border-indigo-200 rounded-xl text-sm outline-none focus:border-indigo-500 resize-none custom-scrollbar" />
-                    <button onClick={handleScheduleBulkPaste} type="button" className="mt-3 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-all shadow-sm active:scale-95">시간표 일괄 적용하기</button>
+                    <button onClick={handleScheduleBulkPaste} type="button" className="mt-3 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-all shadow-sm active:scale-95">현재 세팅된 고사에 시간표 추가</button>
                   </div>
                   <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">
-                    {(!globalSettings.schedules?.[`${adminData.year}|${adminData.semester}|${adminData.examName}`] || globalSettings.schedules?.[`${adminData.year}|${adminData.semester}|${adminData.examName}`].length === 0) && <p className="text-center text-sm text-gray-400 py-4">이 시험에 등록된 시간표가 없습니다.</p>}
-                    {(globalSettings.schedules?.[`${adminData.year}|${adminData.semester}|${adminData.examName}`] || []).map(item => (
+                    {(!globalSettings.schedules?.[`${adminData.activeSettings?.scope?.year}|${adminData.activeSettings?.scope?.semester}|${adminData.activeSettings?.scope?.examName}`] || globalSettings.schedules?.[`${adminData.activeSettings?.scope?.year}|${adminData.activeSettings?.scope?.semester}|${adminData.activeSettings?.scope?.examName}`].length === 0) && <p className="text-center text-sm text-gray-400 py-4">이 시험에 등록된 시간표가 없습니다.</p>}
+                    {(globalSettings.schedules?.[`${adminData.activeSettings?.scope?.year}|${adminData.activeSettings?.scope?.semester}|${adminData.activeSettings?.scope?.examName}`] || []).map(item => (
                       <div key={item.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-200 shadow-sm hover:border-indigo-200 text-sm">
                         <span className="font-medium text-gray-800"><strong className="w-28 inline-block">{item.date}</strong> | <strong className="w-12 inline-block text-center">{item.grade}학년</strong> | <span className="w-12 inline-block text-center">{item.period}교시</span> | <strong className="ml-2 text-indigo-700">{item.subject}</strong></span>
                         <button onClick={() => removeScheduleItem(item.id)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
@@ -1482,7 +1556,7 @@ export default function App() {
                     <Users size={20} className="text-purple-500"/> 서명용 공통 과목 및 교사 명단 보관함
                   </h3>
                   <p className="text-xs text-purple-700 mb-4 font-bold bg-purple-50 inline-block px-3 py-1.5 rounded-lg border border-purple-100">
-                    💡 이 명단은 모든 학기와 고사에서 공통으로 유지(재사용)됩니다.
+                    💡 교사 명단과 체크리스트는 모든 연도/학기에 <strong className="text-purple-900 font-black">공통으로 재사용</strong>됩니다. (바뀔 때만 수정하세요)
                   </p>
                   <div className="mb-6 p-5 bg-purple-50/50 border border-purple-100 rounded-2xl">
                     <h4 className="text-sm font-black text-purple-900 mb-2 flex items-center gap-2"><FileText size={16}/> 엑셀 명단 대량 붙여넣기</h4>
