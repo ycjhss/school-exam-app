@@ -135,11 +135,13 @@ const formatDateTime = (isoString) => {
 };
 
 const getDisplayDate = (sig) => {
-  if (!sig || !sig.createdAt) return '';
+  if (!sig) return '';
+  const dateObj = sig.createdAt || sig.updatedAt || sig.printedAt;
+  if (!dateObj) return '';
   try {
-    if (typeof sig.createdAt.toDate === 'function') return formatDateTime(sig.createdAt.toDate().toISOString());
-    if (typeof sig.createdAt === 'string') return formatDateTime(sig.createdAt);
-    if (sig.createdAt instanceof Date) return formatDateTime(sig.createdAt.toISOString());
+    if (typeof dateObj.toDate === 'function') return formatDateTime(dateObj.toDate().toISOString());
+    if (typeof dateObj === 'string') return formatDateTime(dateObj);
+    if (dateObj instanceof Date) return formatDateTime(dateObj.toISOString());
   } catch(e) { return ''; }
   return '';
 };
@@ -155,7 +157,7 @@ const formatExamOption = (opt) => {
 };
 
 const getScopeId = (vYear, vSem, vExam, item) => {
-  return `${vYear}_${vSem}_${vExam}_${item.date}_${item.grade}_${item.period}_${item.subject}`.replace(/\s/g, '');
+  return `${vYear}_${vSem}_${vExam}_${item.grade}_${item.subject}`.replace(/\s/g, '');
 };
 
 const SignaturePad = ({ onSave, resetTrigger }) => {
@@ -211,7 +213,6 @@ const RatioRow = ({ item, year, sem, grade, onSave, onDelete }) => {
   const [formData, setFormData] = useState(item);
   const [confirmName, setConfirmName] = useState(item.confirmedBy || '');
 
-  // 💡 직렬화(JSON.stringify)를 통해 불필요한 무한 렌더링 방지
   useEffect(() => {
     setFormData(item);
     setConfirmName(item.confirmedBy || '');
@@ -335,13 +336,12 @@ export default function App() {
     ],
     checklist: defaultChecklistData,
     schedules: {},
-    perfSchedules: {}, // 💡 수행평가 대상 과목 관리 State 추가
+    perfSchedules: {},
     activeSettings: defaultActiveSettings
   };
 
   const [globalSettings, setGlobalSettings] = useState(defaultGlobalSettings);
   
-  // States
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedTeacher, setSelectedTeacher] = useState('');
   const [signatureData, setSignatureData] = useState(null);
@@ -372,8 +372,17 @@ export default function App() {
   const [newTeachers, setNewTeachers] = useState({}); 
   const [adminMessage, setAdminMessage] = useState({ type: '', text: '' });
   const [bulkInput, setBulkInput] = useState(''); 
+  
   const [scheduleBulkInput, setScheduleBulkInput] = useState('');
-  const [perfBulkInput, setPerfBulkInput] = useState(''); // 💡 수행평가 대량 입력용
+  const [newSchDate, setNewSchDate] = useState('');
+  const [newSchGrade, setNewSchGrade] = useState('1');
+  const [newSchPeriod, setNewSchPeriod] = useState('');
+  const [newSchSubject, setNewSchSubject] = useState('');
+
+  const [perfBulkInput, setPerfBulkInput] = useState(''); 
+  const [newPerfGrade, setNewPerfGrade] = useState('1');
+  const [newPerfSubject, setNewPerfSubject] = useState('');
+
   const [allSignatures, setAllSignatures] = useState([]); 
   const [printStatuses, setPrintStatuses] = useState([]); 
   const [newChecklistType, setNewChecklistType] = useState('item1');
@@ -501,7 +510,6 @@ export default function App() {
     }
   });
 
-  // 💡 추정분할용 동적 옵션 (수행평가 엑셀 데이터 연동 반영)
   let cutoffSubjectOptions = [];
   if (localCutoffExam === '수행평가') {
     const perfKey = `${activeCutoff.year}|${activeCutoff.semester}`;
@@ -602,7 +610,6 @@ export default function App() {
     setIsSaving(false);
   };
 
-  // 💡 비율 데이터 표시 병합 로직 (중복 출력 버그 방지)
   const inputRatios = assessmentRatios.filter(r => String(r.year) === String(ratioYear) && String(r.semester) === String(ratioSem));
   let displayRatios = [];
   if (String(ratioYear) === '2026' && String(ratioSem) === '1') {
@@ -616,7 +623,7 @@ export default function App() {
   } else {
     displayRatios = [...inputRatios];
   }
-  // newRatioRows는 map에서 별도로 그리므로 displayRatios에 포함시키면 안 됩니다.
+  displayRatios = [...displayRatios, ...newRatioRows.filter(r => String(r.year) === String(ratioYear) && String(r.semester) === String(ratioSem))];
 
   const handleRatioSave = async (data, isConfirm = false, confirmName = '', isUnconfirm = false) => {
     const totalVal = String(data.total || '').trim();
@@ -696,6 +703,16 @@ export default function App() {
     setScheduleBulkInput(''); setAdminMessage({ type: 'success', text: '해당 시험에 시간표 추가됨. 꼭 [저장하기]를 누르세요.' }); setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000);
   };
 
+  const handleAddSingleSchedule = () => {
+    if (!newSchDate.trim() || !newSchSubject.trim()) return;
+    setAdminData(prev => {
+      const key = `${prev.activeSettings.scope.year}|${prev.activeSettings.scope.semester}|${prev.activeSettings.scope.examName}`;
+      const existing = prev.schedules?.[key] || [];
+      return { ...prev, schedules: { ...(prev.schedules || {}), [key]: [...existing, { id: Date.now(), date: newSchDate.trim(), grade: newSchGrade, period: newSchPeriod.trim(), subject: newSchSubject.trim() }] } };
+    });
+    setNewSchSubject(''); setNewSchDate(''); setNewSchPeriod('');
+  };
+
   const removeScheduleItem = (id) => {
     setAdminData(prev => {
       const key = `${prev.activeSettings.scope.year}|${prev.activeSettings.scope.semester}|${prev.activeSettings.scope.examName}`;
@@ -704,7 +721,6 @@ export default function App() {
     });
   };
 
-  // 💡 관리자 수행평가 명단 적용 함수
   const handlePerfBulkPaste = () => {
     if(!perfBulkInput.trim()) return;
     const lines = perfBulkInput.split('\n');
@@ -718,6 +734,16 @@ export default function App() {
       return { ...prev, perfSchedules: { ...(prev.perfSchedules || {}), [key]: [...existing, ...newPerf] } };
     });
     setPerfBulkInput(''); setAdminMessage({ type: 'success', text: '수행평가 과목이 추가되었습니다. 꼭 [저장하기]를 누르세요.' }); setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000);
+  };
+
+  const handleAddSinglePerf = () => {
+    if (!newPerfSubject.trim()) return;
+    setAdminData(prev => {
+      const key = `${prev.activeSettings.cutoff.year}|${prev.activeSettings.cutoff.semester}`;
+      const existing = prev.perfSchedules?.[key] || [];
+      return { ...prev, perfSchedules: { ...(prev.perfSchedules || {}), [key]: [...existing, { id: Date.now(), grade: newPerfGrade, subject: newPerfSubject.trim() }] } };
+    });
+    setNewPerfSubject('');
   };
 
   const removePerfItem = (id) => {
@@ -1155,6 +1181,15 @@ export default function App() {
                 </div>
               </div>
 
+              {ratioYear === '2026' && ratioSem === '1' && currentRatios.length === 0 && displayRatios.length === 0 && (
+                <div className="mb-6 p-6 bg-amber-50 border border-amber-200 rounded-2xl text-center print:hidden">
+                  <p className="text-amber-800 font-bold mb-3">2026학년도 1학기 데이터가 아직 없습니다.</p>
+                  <button onClick={() => {}} className="bg-amber-600 text-white px-6 py-2.5 rounded-xl font-black shadow-md hover:bg-amber-700 active:scale-95 transition-all">
+                    초기 데이터는 자동으로 복원됩니다.
+                  </button>
+                </div>
+              )}
+
               <div className="w-full">
                 {[1, 2, 3].map(g => {
                   const gradeRatios = displayRatios.filter(r => String(r.grade) === String(g));
@@ -1563,18 +1598,24 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 💡 새롭게 추가된 수행평가 과목 관리 영역 */}
+                {/* 수행평가 과목 관리 영역 */}
                 <div className="pt-4 border-t border-gray-100">
                   <h3 className="text-lg font-black text-gray-800 mb-2 flex items-center gap-2">
                     <ClipboardList size={20} className="text-purple-500"/> 
                     [{adminData.activeSettings?.cutoff?.year}년 {adminData.activeSettings?.cutoff?.semester}학기] 수행평가 과목 관리
                   </h3>
                   <p className="text-xs text-purple-700 mb-4 font-bold bg-purple-50 inline-block px-3 py-1.5 rounded-lg border border-purple-100">
-                    💡 엑셀에서 <strong>[학년] [과목명]</strong> 2칸 형태의 표를 복사해 붙여넣으세요. (추정분할 탭에서 수행평가 입력 시 사용됩니다.)
+                    💡 추정분할 탭에서 '수행평가'를 입력할 때 사용되는 과목 명단입니다.
                   </p>
                   <div className="mb-6 p-5 bg-rose-50/50 border border-rose-100 rounded-2xl">
-                    <textarea value={perfBulkInput} onChange={e => setPerfBulkInput(e.target.value)} className="w-full h-24 p-3 bg-white border border-rose-200 rounded-xl text-sm outline-none focus:border-rose-500 resize-none custom-scrollbar" />
-                    <button onClick={handlePerfBulkPaste} type="button" className="mt-3 px-4 py-2 bg-rose-600 text-white text-xs font-bold rounded-lg hover:bg-rose-700 transition-all shadow-sm active:scale-95">현재 학기에 수행평가 과목 일괄 추가</button>
+                    <div className="flex gap-2 mb-4">
+                      <select value={newPerfGrade} onChange={e=>setNewPerfGrade(e.target.value)} className="w-1/4 p-2 bg-white border border-rose-200 rounded-lg text-xs font-bold focus:border-rose-500 outline-none"><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select>
+                      <input type="text" value={newPerfSubject} onChange={e=>setNewPerfSubject(e.target.value)} placeholder="단일 과목명 추가" className="flex-1 p-2 bg-white border border-rose-200 rounded-lg text-xs font-bold focus:border-rose-500 outline-none"/>
+                      <button onClick={handleAddSinglePerf} type="button" className="bg-gray-800 text-white px-4 rounded-lg font-bold hover:bg-black active:scale-95 whitespace-nowrap text-xs">개별 추가</button>
+                    </div>
+                    <p className="text-xs text-rose-700 mb-3 opacity-80 leading-relaxed">또는 엑셀에서 <strong>[학년] [과목명]</strong> 2칸을 복사해 아래에 대량으로 붙여넣으세요.</p>
+                    <textarea value={perfBulkInput} onChange={e => setPerfBulkInput(e.target.value)} className="w-full h-20 p-3 bg-white border border-rose-200 rounded-xl text-sm outline-none focus:border-rose-500 resize-none custom-scrollbar" />
+                    <button onClick={handlePerfBulkPaste} type="button" className="mt-3 px-4 py-2 bg-rose-600 text-white text-xs font-bold rounded-lg hover:bg-rose-700 transition-all shadow-sm active:scale-95">수행평가 과목 일괄 추가</button>
                   </div>
                   <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">
                     {(!globalSettings.perfSchedules?.[`${adminData.activeSettings?.cutoff?.year}|${adminData.activeSettings?.cutoff?.semester}`] || globalSettings.perfSchedules?.[`${adminData.activeSettings?.cutoff?.year}|${adminData.activeSettings?.cutoff?.semester}`].length === 0) && <p className="text-center text-sm text-gray-400 py-4">이 학기에 등록된 수행평가 과목이 없습니다.</p>}
@@ -1596,10 +1637,16 @@ export default function App() {
                     💡 위쪽의 [시험 범위 입력] 세팅을 변경하시면, 해당 고사에 매칭되는 시간표로 즉시 전환됩니다.
                   </p>
                   <div className="mb-6 p-5 bg-indigo-50/50 border border-indigo-100 rounded-2xl">
-                    <h4 className="text-sm font-black text-indigo-900 mb-2 flex items-center gap-2"><FileText size={16}/> 엑셀 시간표 대량 붙여넣기</h4>
-                    <p className="text-xs text-indigo-700 mb-3 opacity-80 leading-relaxed">엑셀에서 <strong>[일자] [학년] [교시] [과목]</strong> 4칸 형태의 표를 복사해 붙여넣으세요.</p>
-                    <textarea value={scheduleBulkInput} onChange={e => setScheduleBulkInput(e.target.value)} className="w-full h-24 p-3 bg-white border border-indigo-200 rounded-xl text-sm outline-none focus:border-indigo-500 resize-none custom-scrollbar" />
-                    <button onClick={handleScheduleBulkPaste} type="button" className="mt-3 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-all shadow-sm active:scale-95">현재 세팅된 고사에 시간표 추가</button>
+                    <div className="flex gap-2 mb-4">
+                      <input type="text" value={newSchDate} onChange={e=>setNewSchDate(e.target.value)} placeholder="일자 (예: 4.28)" className="w-1/5 p-2 bg-white border border-indigo-200 rounded-lg text-xs font-bold focus:border-indigo-500 outline-none"/>
+                      <select value={newSchGrade} onChange={e=>setNewSchGrade(e.target.value)} className="w-1/5 p-2 bg-white border border-indigo-200 rounded-lg text-xs font-bold focus:border-indigo-500 outline-none"><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select>
+                      <input type="text" value={newSchPeriod} onChange={e=>setNewSchPeriod(e.target.value)} placeholder="교시" className="w-1/5 p-2 bg-white border border-indigo-200 rounded-lg text-xs font-bold focus:border-indigo-500 outline-none"/>
+                      <input type="text" value={newSchSubject} onChange={e=>setNewSchSubject(e.target.value)} placeholder="단일 과목명 추가" className="flex-1 p-2 bg-white border border-indigo-200 rounded-lg text-xs font-bold focus:border-indigo-500 outline-none"/>
+                      <button onClick={handleAddSingleSchedule} type="button" className="bg-gray-800 text-white px-3 rounded-lg font-bold hover:bg-black active:scale-95 whitespace-nowrap text-xs">개별 추가</button>
+                    </div>
+                    <p className="text-xs text-indigo-700 mb-3 opacity-80 leading-relaxed">또는 엑셀에서 <strong>[일자] [학년] [교시] [과목]</strong> 4칸 형태의 표를 복사해 대량으로 붙여넣으세요.</p>
+                    <textarea value={scheduleBulkInput} onChange={e => setScheduleBulkInput(e.target.value)} className="w-full h-20 p-3 bg-white border border-indigo-200 rounded-xl text-sm outline-none focus:border-indigo-500 resize-none custom-scrollbar" />
+                    <button onClick={handleScheduleBulkPaste} type="button" className="mt-3 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-all shadow-sm active:scale-95">시간표 일괄 추가</button>
                   </div>
                   <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">
                     {(!globalSettings.schedules?.[`${adminData.activeSettings?.scope?.year}|${adminData.activeSettings?.scope?.semester}|${adminData.activeSettings?.scope?.examName}`] || globalSettings.schedules?.[`${adminData.activeSettings?.scope?.year}|${adminData.activeSettings?.scope?.semester}|${adminData.activeSettings?.scope?.examName}`].length === 0) && <p className="text-center text-sm text-gray-400 py-4">이 시험에 등록된 시간표가 없습니다.</p>}
