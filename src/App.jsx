@@ -938,7 +938,7 @@ export default function App() {
     }
 
     if (displayStatusRatios.length === 0) {
-      return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">해당 학기({vRatioYear}년 {vRatioSem}학기)에 입력된 평가 및 수행 비율 데이터가 없습니다.</div>;
+      return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">해당 학기({vRatioYear}년 {vRatioSem}학기)에 입력된 시험 및 수행 비율 데이터가 없습니다.</div>;
     }
 
     return (
@@ -1081,7 +1081,7 @@ export default function App() {
           
           <div className="flex flex-wrap bg-gray-200/50 p-1 rounded-xl sm:rounded-2xl border border-gray-200 justify-center">
             <button onClick={() => setViewMode('home')} className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all duration-200 flex items-center gap-1 ${viewMode==='home'?'bg-white text-gray-800 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}><Home size={12}/>홈</button>
-            <button onClick={() => setViewMode('ratio')} className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all duration-200 flex items-center gap-1 ${viewMode==='ratio'?'bg-white text-amber-600 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}><ClipboardList size={12}/>평가 및 수행 비율</button>
+            <button onClick={() => setViewMode('ratio')} className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all duration-200 flex items-center gap-1 ${viewMode==='ratio'?'bg-white text-amber-600 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}><ClipboardList size={12}/>시험 및 수행 비율</button>
             <button onClick={() => setViewMode('teacher')} className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all duration-200 flex items-center gap-1 ${viewMode==='teacher'?'bg-white text-blue-600 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}><Edit2 size={12}/>출제 서명</button>
             <button onClick={() => setViewMode('scope')} className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all duration-200 flex items-center gap-1 ${viewMode==='scope'?'bg-white text-indigo-600 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}><CalendarDays size={12}/>시험 범위</button>
             <button onClick={() => setViewMode('cutoff')} className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black transition-all duration-200 flex items-center gap-1 ${viewMode==='cutoff'?'bg-white text-rose-600 shadow-md transform scale-105':'text-gray-500 hover:text-gray-700'}`}><Target size={12}/>추정분할</button>
@@ -1104,7 +1104,7 @@ export default function App() {
                 <button onClick={() => setViewMode('ratio')} className="group bg-white rounded-[2rem] p-6 border-2 border-amber-50 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-amber-400 transition-all text-left relative overflow-hidden flex flex-col h-full">
                   <div className="absolute right-0 top-0 w-28 h-28 bg-amber-50/50 rounded-bl-full group-hover:bg-amber-100 transition-colors" />
                   <div className="w-12 h-12 rounded-2xl bg-amber-600 text-white flex items-center justify-center mb-3 relative z-10 shadow-md shadow-amber-200"><ClipboardList size={22}/></div>
-                  <h3 className="text-lg font-black text-gray-900 mb-2 relative z-10">평가 및 수행 비율</h3>
+                  <h3 className="text-lg font-black text-gray-900 mb-2 relative z-10">시험 및 수행 비율</h3>
                   <p className="text-xs text-gray-500 mb-5 flex-1 relative z-10">과목별 정기시험 및 수행평가 비율을 관리하고 최종 확인합니다.</p>
                   <div className="w-full py-2.5 bg-amber-50 text-amber-700 rounded-xl font-bold text-center text-sm group-hover:bg-amber-600 group-hover:text-white transition-colors relative z-10">비율 관리</div>
                 </button>
@@ -1412,7 +1412,7 @@ export default function App() {
               {statusTab === 'ratio' && (
                 <div className="animate-fade-in print:block">
                   <div className="mb-6 text-center text-lg font-black text-amber-800 bg-amber-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
-                    [평가 및 수행 비율 현황] {vRatioYear}학년도 {vRatioSem}학기
+                    [시험 및 수행 비율 현황] {vRatioYear}학년도 {vRatioSem}학기
                   </div>
                   <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-2xl font-black tracking-widest">{vRatioYear}학년도 {vRatioSem}학기 과목별 정기시험 및 수행평가 비율</h2></div>
                   {renderReadOnlyRatioTable()}
