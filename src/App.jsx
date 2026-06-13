@@ -566,10 +566,10 @@ export default function App() {
     if (!selectedScheduleItem) { alert("과목을 선택해주세요."); return; }
     setIsSaving(true);
     try {
-      const docId = getScopeId(String(activeScope.year), String(activeScope.semester), String(activeScope.examName), selectedScheduleItem);
+      const vYear = String(globalSettings.year); const vSem = String(globalSettings.semester); const vExam = String(globalSettings.examName);
+      const docId = getScopeId(vYear, vSem, vExam, selectedScheduleItem);
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examScopes', docId), {
-        year: String(activeScope.year), semester: String(activeScope.semester), examName: String(activeScope.examName), 
-        date: selectedScheduleItem.date, grade: selectedScheduleItem.grade,
+        year: vYear, semester: vSem, examName: vExam, date: selectedScheduleItem.date, grade: selectedScheduleItem.grade,
         period: selectedScheduleItem.period, subject: selectedScheduleItem.subject, scopeText: scopeInputText, teacherName: scopeInputTeacher.trim(),
         updatedAt: serverTimestamp()
       });
@@ -581,18 +581,27 @@ export default function App() {
   const handleCutoffSubmit = async (e) => {
     e.preventDefault();
     if (!cutoffSubjectGrade) { alert("과목을 선택해주세요."); return; }
+    
+    const isAllEmpty = !cutoffScores.ab && !cutoffScores.bc && !cutoffScores.cd && !cutoffScores.de && !cutoffScores.ei;
+    
+    // 💡 추가된 부분: 점수가 하나라도 입력되어 있다면 성함을 무조건 입력하도록 강제
+    if (!isAllEmpty && !cutoffTeacher.trim()) {
+      alert("입력자 성함을 필수적으로 입력해주세요.");
+      return;
+    }
+
     setIsSaving(true);
     try {
+      const vYear = String(globalSettings.year); const vSem = String(globalSettings.semester); const vExam = String(globalSettings.examName);
       const [g, s] = cutoffSubjectGrade.split('|');
-      const docId = `${activeCutoff.year}_${activeCutoff.semester}_${localCutoffExam}_${g}_${s}`.replace(/\s/g, '');
-      const isAllEmpty = !cutoffScores.ab && !cutoffScores.bc && !cutoffScores.cd && !cutoffScores.de && !cutoffScores.ei;
+      const docId = `${vYear}_${vSem}_${vExam}_${g}_${s}`.replace(/\s/g, '');
 
       if (isAllEmpty) {
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examCutoffs', docId));
         alert("입력된 점수가 없어 기존 기록이 완전히 삭제(초기화)되었습니다.");
       } else {
         await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examCutoffs', docId), {
-          year: String(activeCutoff.year), semester: String(activeCutoff.semester), examName: localCutoffExam, grade: g, subject: s,
+          year: vYear, semester: vSem, examName: vExam, grade: g, subject: s,
           ab: cutoffScores.ab, bc: cutoffScores.bc, cd: cutoffScores.cd, de: cutoffScores.de, ei: cutoffScores.ei,
           teacherName: cutoffTeacher.trim(), updatedAt: serverTimestamp()
         });
@@ -603,16 +612,7 @@ export default function App() {
     setIsSaving(false);
   };
 
-  const inputRatios = assessmentRatios.filter(r => String(r.year) === String(ratioYear) && String(r.semester) === String(ratioSem));
-  let displayRatios = [];
-  if (String(ratioYear) === '2026' && String(ratioSem) === '1') {
-    displayRatios = defaultAssessment2026S1.map(def => {
-      const found = inputRatios.find(r => r.subject === def.subject && r.grade === def.grade);
-      return found ? found : { ...def, year: '2026', semester: '1', id: `def_2026_1_${def.grade}_${def.subject}`.replace(/\s/g, ''), isUnsavedDefault: true };
-    });
-    inputRatios.forEach(r => {
-      if (!displayRatios.find(d => d.subject === r.subject && d.grade === r.grade)) displayRatios.push(r);
-    });
+  // 💡 비율 데이터 필터 및 병합 로직 (2026-1 초기화 자동 반영)
   } else {
     displayRatios = [...inputRatios];
   }
@@ -1326,7 +1326,7 @@ export default function App() {
                       <div><label className="block text-xs font-black text-gray-500 mb-1 ml-1">D / E</label><input type="number" step="0.01" value={cutoffScores.de} onChange={e=>setCutoffScores({...cutoffScores, de: e.target.value})} className="w-full p-3 bg-rose-50 border-2 border-rose-100 rounded-xl text-center font-bold focus:border-rose-500 outline-none" placeholder="예: 36.61"/></div>
                       <div className="col-span-2"><label className="block text-xs font-black text-gray-500 mb-1 ml-1">E / I (또는 미만)</label><input type="number" step="0.01" value={cutoffScores.ei} onChange={e=>setCutoffScores({...cutoffScores, ei: e.target.value})} className="w-full p-3 bg-rose-50 border-2 border-rose-100 rounded-xl text-center font-bold focus:border-rose-500 outline-none" placeholder="예: 19.95"/></div>
                     </div>
-                    <div><label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1 mt-2">Teacher (성함)</label><input type="text" value={cutoffTeacher} onChange={e=>setCutoffTeacher(e.target.value)} className="w-full p-3 bg-gray-50 border-2 border-gray-200 rounded-xl text-sm font-bold focus:border-rose-500 outline-none" placeholder="입력자 성함 (선택 입력)"/></div>
+                    <div><label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1 mt-2">Teacher (성함)</label><input type="text" value={cutoffTeacher} onChange={e=>setCutoffTeacher(e.target.value)} className="w-full p-3 bg-gray-50 border-2 border-gray-200 rounded-xl text-sm font-bold focus:border-rose-500 outline-none" placeholder="입력자 성함 (필수 입력)" required/></div>
                     <button type="submit" disabled={isSaving} className="w-full py-4 mt-2 bg-gray-900 text-white rounded-xl font-black shadow-md hover:bg-black transition-all active:scale-95 flex items-center justify-center gap-2">
                       {isSaving ? '저장 중...' : <><Save size={18}/> 점수 저장하기</>}
                     </button>
