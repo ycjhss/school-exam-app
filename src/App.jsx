@@ -500,7 +500,7 @@ export default function App() {
     }
   });
 
-  // 💡 추정분할용 동적 옵션 생성 로직 (수정됨: 콤보박스 선택값에 따른 완전한 동적 구성)
+  // 추정분할용 동적 옵션 생성 로직
   let cutoffSubjectOptions = [];
   if (localCutoffExam === '수행평가') {
     const currentRatiosForCutoff = assessmentRatios.filter(r => String(r.year) === String(activeCutoff.year) && String(r.semester) === String(activeCutoff.semester));
@@ -511,7 +511,6 @@ export default function App() {
     const uniqueStr = Array.from(new Set(baseRatios.map(item => `${item.grade}|${item.subject}`)));
     cutoffSubjectOptions = uniqueStr.map(str => { const [g, s] = str.split('|'); return { grade: g, subject: s }; }).sort((a,b) => String(a.grade || '').localeCompare(String(b.grade || '')) || String(a.subject || '').localeCompare(String(b.subject || '')));
   } else {
-    // 1차/2차 정기시험일 경우 해당 고사명에 맞는 시간표를 찾아서 동적 구성
     const formExamKey = `${activeCutoff.year}|${activeCutoff.semester}|${localCutoffExam}`;
     let formSchedule = globalSettings.schedules?.[formExamKey] || [];
     if (formSchedule.length === 0 && formExamKey === `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`) {
@@ -583,7 +582,6 @@ export default function App() {
     
     const isAllEmpty = !cutoffScores.ab && !cutoffScores.bc && !cutoffScores.cd && !cutoffScores.de && !cutoffScores.ei;
     
-    // 💡 추가된 부분: 점수가 하나라도 입력되어 있다면 성함을 무조건 입력하도록 강제
     if (!isAllEmpty && !cutoffTeacher.trim()) {
       alert("입력자 성함을 필수적으로 입력해주세요.");
       return;
@@ -610,16 +608,15 @@ export default function App() {
     setIsSaving(false);
   };
 
-  // 비율 데이터 표시를 위한 데이터 병합
   const inputRatios = assessmentRatios.filter(r => String(r.year) === String(ratioYear) && String(r.semester) === String(ratioSem));
   let displayRatios = [];
   if (String(ratioYear) === '2026' && String(ratioSem) === '1') {
     displayRatios = defaultAssessment2026S1.map(def => {
-      const found = inputRatios.find(r => r.subject === def.subject && r.grade === def.grade);
+      const found = inputRatios.find(r => r.subject === def.subject && String(r.grade) === String(def.grade));
       return found ? found : { ...def, year: '2026', semester: '1', id: `def_2026_1_${def.grade}_${def.subject}`.replace(/\s/g, ''), isUnsavedDefault: true };
     });
     inputRatios.forEach(r => {
-      if (!displayRatios.find(d => d.subject === r.subject && d.grade === r.grade)) displayRatios.push(r);
+      if (!displayRatios.find(d => d.subject === r.subject && String(d.grade) === String(r.grade))) displayRatios.push(r);
     });
   } else {
     displayRatios = [...inputRatios];
@@ -773,10 +770,10 @@ export default function App() {
     let exportRatios = [];
     if (String(vRatioYear) === '2026' && String(vRatioSem) === '1') {
       exportRatios = defaultAssessment2026S1.map(def => {
-        const found = currentStatusRatios.find(r => r.subject === def.subject && r.grade === def.grade);
+        const found = currentStatusRatios.find(r => r.subject === def.subject && String(r.grade) === String(def.grade));
         return found ? found : { ...def, year: '2026', semester: '1' };
       });
-      currentStatusRatios.forEach(r => { if (!exportRatios.find(d => d.subject === r.subject && d.grade === r.grade)) exportRatios.push(r); });
+      currentStatusRatios.forEach(r => { if (!exportRatios.find(d => d.subject === r.subject && String(d.grade) === String(r.grade))) exportRatios.push(r); });
     } else { exportRatios = [...currentStatusRatios]; }
 
     [1, 2, 3].forEach(g => {
@@ -909,11 +906,11 @@ export default function App() {
 
     if (String(vRatioYear) === '2026' && String(vRatioSem) === '1') {
       displayStatusRatios = defaultAssessment2026S1.map(def => {
-        const found = currentStatusRatios.find(r => r.subject === def.subject && r.grade === def.grade);
+        const found = currentStatusRatios.find(r => r.subject === def.subject && String(r.grade) === String(def.grade));
         return found ? found : { ...def, year: '2026', semester: '1' };
       });
       currentStatusRatios.forEach(r => {
-        if (!displayStatusRatios.find(d => d.subject === r.subject && d.grade === r.grade)) displayStatusRatios.push(r);
+        if (!displayStatusRatios.find(d => d.subject === r.subject && String(d.grade) === String(r.grade))) displayStatusRatios.push(r);
       });
     } else {
       displayStatusRatios = [...currentStatusRatios];
@@ -1142,8 +1139,8 @@ export default function App() {
               {ratioYear === '2026' && ratioSem === '1' && currentRatios.length === 0 && displayRatios.length === 0 && (
                 <div className="mb-6 p-6 bg-amber-50 border border-amber-200 rounded-2xl text-center print:hidden">
                   <p className="text-amber-800 font-bold mb-3">2026학년도 1학기 데이터가 아직 없습니다.</p>
-                  <button onClick={handleLoadDefaultRatios} className="bg-amber-600 text-white px-6 py-2.5 rounded-xl font-black shadow-md hover:bg-amber-700 active:scale-95 transition-all">
-                    1학기 원본 데이터 (기본값) 불러오기
+                  <button onClick={() => {}} className="bg-amber-600 text-white px-6 py-2.5 rounded-xl font-black shadow-md hover:bg-amber-700 active:scale-95 transition-all">
+                    초기 데이터는 자동으로 복원됩니다.
                   </button>
                 </div>
               )}
@@ -1159,7 +1156,7 @@ export default function App() {
                         <h3 className="text-xl font-black text-gray-800 mb-3 border-l-4 border-amber-500 pl-3">{g}학년</h3>
                         <div className="text-center py-6 bg-gray-50 rounded-2xl text-gray-400 font-bold text-sm">데이터가 없습니다. 아래 버튼으로 과목을 추가하세요.</div>
                         <div className="mt-3 text-right">
-                          <button onClick={() => setNewRatioRows([...newRatioRows, { id: `new_${g}_${Date.now()}`, year: ratioYear, semester: ratioSem, grade: g, isConfirmed: false }])} className="text-xs bg-gray-800 text-white px-3 py-1.5 rounded-lg hover:bg-black font-bold flex items-center gap-1 inline-flex"><Plus size={14}/> {g}학년 과목 추가</button>
+                          <button onClick={() => setNewRatioRows([...newRatioRows, { id: `new_${g}_${Date.now()}_${Math.floor(Math.random()*1000)}`, year: ratioYear, semester: ratioSem, grade: g, isConfirmed: false }])} className="text-xs bg-gray-800 text-white px-3 py-1.5 rounded-lg hover:bg-black font-bold flex items-center gap-1 inline-flex"><Plus size={14}/> {g}학년 과목 추가</button>
                         </div>
                       </div>
                     );
@@ -1197,7 +1194,7 @@ export default function App() {
                         </table>
                       </div>
                       <div className="mt-3 text-right">
-                        <button onClick={() => setNewRatioRows([...newRatioRows, { id: `new_${g}_${Date.now()}`, year: ratioYear, semester: ratioSem, grade: g, isConfirmed: false }])} className="text-xs bg-gray-800 text-white px-3 py-1.5 rounded-lg hover:bg-black font-bold flex items-center gap-1 inline-flex">
+                        <button onClick={() => setNewRatioRows([...newRatioRows, { id: `new_${g}_${Date.now()}_${Math.floor(Math.random()*1000)}`, year: ratioYear, semester: ratioSem, grade: g, isConfirmed: false }])} className="text-xs bg-gray-800 text-white px-3 py-1.5 rounded-lg hover:bg-black font-bold flex items-center gap-1 inline-flex">
                           <Plus size={14}/> {g}학년 과목 추가
                         </button>
                       </div>
