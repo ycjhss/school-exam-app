@@ -1212,10 +1212,14 @@ export default function App() {
           {/* 교사 서명 화면 */}
           {viewMode === 'teacher' && (
             <div className="w-full max-w-md bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] overflow-hidden border border-white relative mt-4">
-              <div className="px-6 pt-5 pb-0 print:hidden"><button type="button" onClick={() => setViewMode('home')} className="text-xs font-black text-gray-500 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-200 px-3 py-2 rounded-xl transition-all">← 첫 화면으로</button></div>
-              <div className="bg-gradient-to-br from-blue-600 to-blue-800 text-white p-8 text-center relative overflow-hidden mt-4">
-                <h2 className="text-2xl font-black mb-2 relative z-10">출제 검토 확인서</h2>
-                <p className="text-blue-100 text-sm font-medium opacity-90 relative z-10">{String(activeSig.year)}년 {String(activeSig.semester)}학기 {String(activeSig.examName)}</p>
+              <div className="px-6 pt-5 pb-0 print:hidden">
+                <button type="button" onClick={() => setViewMode('home')} className="text-xs font-black text-gray-500 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-200 px-3 py-2 rounded-xl transition-all">← 첫 화면으로</button>
+              </div>
+              <div className="bg-gradient-to-br from-blue-600 to-blue-800 text-white p-6 md:p-8 text-center relative overflow-hidden mt-4">
+                <h2 className="text-xl md:text-2xl font-black relative z-10 leading-snug break-keep">
+                  <span className="block mb-1">{String(activeSig.year)}년 {String(activeSig.semester)}학기 {String(activeSig.examName)}</span>
+                  <span className="block">출제 검토 확인서</span>
+                </h2>
               </div>
               
               {saveSuccess ? (
@@ -1302,8 +1306,11 @@ export default function App() {
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 px-2">
                 <div>
                   <button type="button" onClick={() => setViewMode('home')} className="mb-3 text-xs font-black text-gray-500 hover:text-indigo-600 bg-white hover:bg-indigo-50 border border-gray-200 hover:border-indigo-200 px-3 py-2 rounded-xl transition-all shadow-sm">← 첫 화면으로</button>
-                  <h2 className="text-2xl font-black text-gray-800 flex items-center gap-2"><CalendarDays className="text-indigo-600"/> 시험 범위 입력</h2>
-                  <p className="text-gray-500 text-sm font-medium mt-1">담당 과목의 [입력/수정] 버튼을 눌러주세요. ({activeScope.year}년 {activeScope.semester}학기 {activeScope.examName})</p>
+                  <h2 className="text-xl md:text-2xl font-black text-gray-800 flex items-center gap-2 break-keep">
+                    <CalendarDays className="text-indigo-600 shrink-0"/> 
+                    <span>{activeScope.year}년 {activeScope.semester}학기 {activeScope.examName} 범위 입력</span>
+                  </h2>
+                  <p className="text-gray-500 text-sm font-medium mt-1">담당 과목의 [입력/수정] 버튼을 눌러주세요.</p>
                 </div>
               </div>
               {renderScheduleTable(false)}
@@ -1316,9 +1323,12 @@ export default function App() {
               <div className="px-6 pt-5 pb-0 print:hidden">
                 <button type="button" onClick={() => setViewMode('home')} className="text-xs font-black text-gray-500 hover:text-rose-600 bg-gray-50 hover:bg-rose-50 border border-gray-200 hover:border-rose-200 px-3 py-2 rounded-xl transition-all">← 첫 화면으로</button>
               </div>
-              <div className="bg-gradient-to-br from-rose-600 to-rose-800 text-white p-8 text-center relative overflow-hidden mt-4">
-                <h2 className="text-2xl font-black mb-2 relative z-10 flex justify-center items-center gap-2"><Target size={24}/> 추정분할 점수 입력</h2>
-                <p className="text-rose-100 text-sm font-medium opacity-90 relative z-10">{activeCutoff.year}년 {activeCutoff.semester}학기</p>
+              <div className="bg-gradient-to-br from-rose-600 to-rose-800 text-white p-6 md:p-8 text-center relative overflow-hidden mt-4">
+                <h2 className="text-xl md:text-2xl font-black mb-2 relative z-10 flex justify-center items-center gap-2 break-keep">
+                  <Target size={24} className="shrink-0"/> 
+                  <span>{activeCutoff.year}년 {activeCutoff.semester}학기 추정분할 점수 입력</span>
+                </h2>
+                <p className="text-rose-100 text-sm font-medium opacity-90 relative z-10">추정분할 고정 과목만 입력해 주세요.</p>
               </div>
               <form onSubmit={handleCutoffSubmit} className="p-8 space-y-5">
                 <div className="relative group">
