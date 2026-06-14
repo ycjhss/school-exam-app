@@ -385,6 +385,7 @@ export default function App() {
   const [newChecklistType, setNewChecklistType] = useState('item1');
   const [newChecklistText, setNewChecklistText] = useState('');
   const [deleteExamKey, setDeleteExamKey] = useState(null);
+  const [adminCutoffFilterKey, setAdminCutoffFilterKey] = useState('');
 
   useEffect(() => {
     const initAuth = async () => {
@@ -929,17 +930,36 @@ export default function App() {
   examKeys.add(`${activeCutoff.year}|${activeCutoff.semester}|${activeCutoff.examName}`);
   const examOptions = Array.from(examKeys).sort((a,b) => String(b).localeCompare(String(a))); 
 
-  // 관리자모드에서는 현재 기본연도/학기와 관계없이 저장된 추정분할 기록 전체를 보여준다.
-  // 기존에 입력해 둔 과목이 기본연도 설정과 달라도 삭제할 수 있어야 하기 때문이다.
+  // 관리자모드의 추정분할 삭제 목록은 연도/학기/고사별로 필터링한다.
+  // 데이터가 누적되어도 선택한 고사의 기록만 관리할 수 있도록 한다.
+  const adminCutoffExamOptions = Array.from(new Set(
+    (examCutoffs || [])
+      .filter(record => record && record.year && record.semester && record.examName)
+      .map(record => `${String(record.year)}|${String(record.semester)}|${String(record.examName)}`)
+  )).sort((a, b) => {
+    const [ay, asem, aexam] = String(a).split('|');
+    const [by, bsem, bexam] = String(b).split('|');
+    return String(by || '').localeCompare(String(ay || '')) ||
+      String(bsem || '').localeCompare(String(asem || '')) ||
+      String(aexam || '').localeCompare(String(bexam || ''));
+  });
+
+  const activeAdminCutoffFilterKey = adminCutoffExamOptions.includes(adminCutoffFilterKey)
+    ? adminCutoffFilterKey
+    : (adminCutoffExamOptions[0] || '');
+
   const adminCutoffRecords = (examCutoffs || [])
-    .filter(Boolean)
+    .filter(record => {
+      if (!record) return false;
+      if (!activeAdminCutoffFilterKey) return false;
+      return `${String(record.year || '')}|${String(record.semester || '')}|${String(record.examName || '')}` === activeAdminCutoffFilterKey;
+    })
     .sort((a, b) =>
-      String(b?.year || '').localeCompare(String(a?.year || '')) ||
-      String(b?.semester || '').localeCompare(String(a?.semester || '')) ||
-      String(a?.examName || '').localeCompare(String(b?.examName || '')) ||
       String(a?.grade || '').localeCompare(String(b?.grade || '')) ||
       String(a?.subject || '').localeCompare(String(b?.subject || ''))
     );
+
+  const totalAdminCutoffRecordCount = (examCutoffs || []).filter(Boolean).length;
 
   const escapeCSV = (value) => { if (value === null || value === undefined) return ''; return `"${String(value).replace(/"/g, '""')}"`; };
 
@@ -1773,13 +1793,35 @@ export default function App() {
                 <div className="pt-4 border-t border-gray-100">
                   <h3 className="text-lg font-black text-gray-800 mb-2 flex items-center gap-2">
                     <Trash2 size={20} className="text-rose-500"/>
-                    저장된 추정분할 기록 삭제 <span className="ml-2 text-xs bg-rose-100 text-rose-700 px-2 py-1 rounded-full">{adminCutoffRecords.length}건</span>
+                    저장된 추정분할 기록 삭제
+                    <span className="ml-2 text-xs bg-rose-100 text-rose-700 px-2 py-1 rounded-full">
+                      {adminCutoffRecords.length}건 / 전체 {totalAdminCutoffRecordCount}건
+                    </span>
                   </h3>
-                  <p className="text-xs text-rose-700 mb-4 font-bold bg-rose-50 inline-block px-3 py-1.5 rounded-lg border border-rose-100">
-                    💡 현재 기본연도/학기와 관계없이 저장된 모든 추정분할 기록을 보여줍니다. 잘못 입력된 과목만 삭제하면 다시 입력할 수 있습니다.
+                  <p className="text-xs text-rose-700 mb-3 font-bold bg-rose-50 inline-block px-3 py-1.5 rounded-lg border border-rose-100">
+                    💡 연도/학기/고사를 선택하면 해당 고사에 입력된 추정분할 기록만 표시됩니다. 잘못 입력된 과목만 삭제하면 다시 입력할 수 있습니다.
                   </p>
+
+                  <div className="mb-4 bg-white border border-gray-200 rounded-2xl p-3 shadow-sm">
+                    <label className="block text-xs font-black text-gray-600 mb-2">조회할 연도/학기/고사 선택</label>
+                    <select
+                      value={activeAdminCutoffFilterKey}
+                      onChange={e => setAdminCutoffFilterKey(e.target.value)}
+                      disabled={adminCutoffExamOptions.length === 0}
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-rose-500 outline-none disabled:text-gray-400 disabled:bg-gray-100"
+                    >
+                      {adminCutoffExamOptions.length === 0 ? (
+                        <option value="">저장된 추정분할 기록 없음</option>
+                      ) : (
+                        adminCutoffExamOptions.map(key => (
+                          <option key={key} value={key}>{formatExamOption(key)}</option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+
                   <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar pr-2 mb-6">
-                    {adminCutoffRecords.length === 0 && <p className="text-center text-sm text-gray-400 py-4 bg-gray-50 rounded-xl border border-gray-100">저장된 추정분할 기록이 없습니다.</p>}
+                    {adminCutoffRecords.length === 0 && <p className="text-center text-sm text-gray-400 py-4 bg-gray-50 rounded-xl border border-gray-100">선택한 고사에 저장된 추정분할 기록이 없습니다.</p>}
                     {adminCutoffRecords.map(record => (
                       <div key={record.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-xl border border-gray-200 shadow-sm hover:border-rose-200 text-sm">
                         <div className="min-w-0">
