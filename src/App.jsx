@@ -515,32 +515,37 @@ export default function App() {
     }
   });
 
-  // Cutoff Options logic
-  let cutoffSubjectOptions = [];
+  let uniqueSubjectGrades = [];
   if (vExam === '수행평가') {
     const perfKey = `${vYear}|${vSem}`;
     let perfList = globalSettings.perfSchedules?.[perfKey] || [];
     const formUniqueMap = new Map();
     perfList.forEach(item => { formUniqueMap.set(`${item.grade || ''}|${item.subject || ''}`, { grade: item.grade, subject: item.subject }); });
-    viewingCutoffs.forEach(c => { formUniqueMap.set(`${c.grade || ''}|${c.subject || ''}`, { grade: c.grade, subject: c.subject }); });
-    cutoffSubjectOptions = Array.from(formUniqueMap.values()).sort((a,b) => String(a.grade || '').localeCompare(String(b.grade || '')) || String(a.subject || '').localeCompare(String(b.subject || '')));
+    const formCutoffs = examCutoffs.filter(c => String(c.year) === vYear && String(c.semester) === vSem && String(c.examName) === '수행평가');
+    formCutoffs.forEach(c => { formUniqueMap.set(`${c.grade || ''}|${c.subject || ''}`, { grade: c.grade, subject: c.subject }); });
+    uniqueSubjectGrades = Array.from(formUniqueMap.values()).sort((a,b) => String(a.grade || '').localeCompare(String(b.grade || '')) || String(a.subject || '').localeCompare(String(b.subject || '')));
   } else {
+    const formExamKey = `${vYear}|${vSem}|${vExam}`;
+    let formSchedule = globalSettings.schedules?.[formExamKey] || [];
+    if (formSchedule.length === 0 && formExamKey === `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`) {
+      formSchedule = globalSettings.examSchedule || [];
+    }
+    const formScopes = examScopes.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
+    if (formSchedule.length === 0 && formScopes.length > 0) {
+      const recoveredMap = new Map();
+      formScopes.forEach(s => {
+        const key = `${s.grade}_${s.subject}`;
+        if (!recoveredMap.has(key)) recoveredMap.set(key, { grade: s.grade, subject: s.subject });
+      });
+      formSchedule = Array.from(recoveredMap.values());
+    }
     const formUniqueMap = new Map();
-    scheduleToDisplay.forEach(item => { formUniqueMap.set(`${item.grade || ''}|${item.subject || ''}`, { grade: item.grade, subject: item.subject }); });
-    viewingCutoffs.forEach(c => { formUniqueMap.set(`${c.grade || ''}|${c.subject || ''}`, { grade: c.grade, subject: c.subject }); });
-    cutoffSubjectOptions = Array.from(formUniqueMap.values()).sort((a,b) => String(a.grade || '').localeCompare(String(b.grade || '')) || String(a.subject || '').localeCompare(String(b.subject || '')));
+    formSchedule.forEach(item => { formUniqueMap.set(`${item.grade || ''}|${item.subject || ''}`, { grade: item.grade, subject: item.subject }); });
+    const formCutoffs = examCutoffs.filter(c => String(c.year) === vYear && String(c.semester) === vSem && String(c.examName) === vExam);
+    formCutoffs.forEach(c => { formUniqueMap.set(`${c.grade || ''}|${c.subject || ''}`, { grade: c.grade, subject: c.subject }); });
+    uniqueSubjectGrades = Array.from(formUniqueMap.values()).sort((a,b) => String(a.grade || '').localeCompare(String(b.grade || '')) || String(a.subject || '').localeCompare(String(b.subject || '')));
   }
-
-  // Teacher signature states
-  const selectedSubjectObj = Array.isArray(globalSettings.subjects) ? globalSettings.subjects.find(s => s.name === selectedSubject) : null;
-  const safeTeachers = selectedSubjectObj?.teachers || [];
-  const existingSigForSelectedTeacher = allSignatures.find(s => 
-    String(s.year) === vYear && 
-    String(s.semester) === vSem && 
-    String(s.examName) === vExam && 
-    s.subject === selectedSubject && 
-    s.teacherName === selectedTeacher
-  );
+  let cutoffSubjectOptions = uniqueSubjectGrades;
 
   const handleTeacherSubmit = async (e) => {
     e.preventDefault();
@@ -793,7 +798,7 @@ export default function App() {
 
   const handleExportCutoffCSV = () => {
     let csv = "\uFEFF과목명(학년),A/B,B/C,C/D,D/E,E/I\n";
-    cutoffSubjectOptions.forEach(item => {
+    uniqueSubjectGrades.forEach(item => {
       const docId = `${vYear}_${vSem}_${vExam}_${item.grade}_${item.subject}`.replace(/\s/g, '');
       const cutoffDoc = viewingCutoffs.find(c => c.id === docId);
       if (cutoffDoc) {
@@ -847,13 +852,10 @@ export default function App() {
   const removeChecklistItem = (id) => { setAdminData(prev => ({ ...prev, checklist: (prev.checklist || defaultChecklistData).filter(item => item.id !== id) })); };
   const updateChecklistStatus = (id, newStatus) => { setAdminData(prev => ({ ...prev, checklist: (prev.checklist || defaultChecklistData).map(item => item.id === id ? { ...item, status: newStatus } : item ) })); };
 
-  // =======================================================================
-  // 렌더링 도우미 함수 (UI 조각들)
-  // =======================================================================
-  const renderScheduleTable = (scheduleData, scopesData, y, s, e, isPrintView = false) => {
-    if (!scheduleData || scheduleData.length === 0) return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">등록된 시험 시간표가 없습니다.</div>;
+  const renderScheduleTable = (isPrintView = false) => {
+    if (!scheduleToDisplay || scheduleToDisplay.length === 0) return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">등록된 시험 시간표가 없습니다.</div>;
     const dateSpans = {}; const gradeSpans = {};
-    scheduleData.forEach(item => { dateSpans[item.date] = (dateSpans[item.date] || 0) + 1; const gradeKey = `${item.date}_${item.grade}`; gradeSpans[gradeKey] = (gradeSpans[gradeKey] || 0) + 1; });
+    scheduleToDisplay.forEach(item => { dateSpans[item.date] = (dateSpans[item.date] || 0) + 1; const gradeKey = `${item.date}_${item.grade}`; gradeSpans[gradeKey] = (gradeSpans[gradeKey] || 0) + 1; });
     const renderedDates = new Set(); const renderedGrades = new Set();
 
     return (
@@ -870,8 +872,8 @@ export default function App() {
             </tr>
           </thead>
           <tbody>
-            {scheduleData.map((item, idx) => {
-              const scopeId = getScopeId(y, s, e, item); const scopeDoc = (scopesData || []).find(sc => sc.id === scopeId); const gradeKey = `${item.date}_${item.grade}`;
+            {scheduleToDisplay.map((item, idx) => {
+              const scopeId = getScopeId(vYear, vSem, vExam, item); const scopeDoc = viewingScopes.find(s => s.id === scopeId); const gradeKey = `${item.date}_${item.grade}`;
               const showDate = !renderedDates.has(item.date); if (showDate) renderedDates.add(item.date);
               const showGrade = !renderedGrades.has(gradeKey); if (showGrade) renderedGrades.add(gradeKey);
               return (
@@ -900,11 +902,11 @@ export default function App() {
     );
   };
 
-  const renderCutoffTable = (uniqueSubjectsData, cutoffsData, y, s, e, isPrintView = false) => {
-    const submittedCutoffs = (uniqueSubjectsData || []).map(item => {
+  const renderCutoffTable = (isPrintView = false) => {
+    const submittedCutoffs = uniqueSubjectGrades.map(item => {
       if (!item) return null;
-      const docId = `${y}_${s}_${e}_${item?.grade || ''}_${item?.subject || ''}`.replace(/\s/g, '');
-      const doc = (cutoffsData || []).find(c => c.id === docId);
+      const docId = `${vYear}_${vSem}_${vExam}_${item.grade}_${item.subject}`.replace(/\s/g, '');
+      const doc = viewingCutoffs.find(c => c.id === docId);
       return doc ? { ...item, ...doc } : null;
     }).filter(Boolean);
 
@@ -1166,25 +1168,25 @@ export default function App() {
           {viewMode === 'ratio' && (
             <div className="w-full max-w-[1200px] bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-6 md:p-10 animate-fade-in mt-4">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-gray-100 pb-6">
-                <div className="flex flex-col gap-2">
-                  <h2 className="text-2xl font-black text-gray-800 flex items-center gap-2"><ClipboardList className="text-amber-600"/> 과목별 정기시험 및 수행평가 비율</h2>
-                  <p className="text-gray-500 text-sm font-medium">비율을 입력하면 <strong>논술형(괄호 안 합)</strong>과 <strong>계(괄호 밖 합)</strong>가 자동 계산되며, 빈칸 클릭 시 바로 수정할 수 있습니다.</p>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 p-1 rounded-xl px-3">
-                    <History size={16} className="text-gray-400"/>
-                    <input type="text" value={ratioYear} onChange={e=>setRatioYear(e.target.value)} className="w-16 bg-transparent text-sm font-bold text-center outline-none" />년
-                    <select value={ratioSem} onChange={e=>setRatioSem(e.target.value)} className="bg-transparent text-sm font-bold outline-none ml-2">
-                      <option value="1">1학기</option>
-                      <option value="2">2학기</option>
-                    </select>
-                  </div>
-                </div>
+            <div className="flex flex-col gap-2">
+              <h2 className="text-2xl font-black text-gray-800 flex items-center gap-2"><ClipboardList className="text-amber-600"/> 과목별 정기시험 및 수행평가 비율</h2>
+              <p className="text-gray-500 text-sm font-medium">비율을 입력하면 <strong>논술형(괄호 안 합)</strong>과 <strong>계(괄호 밖 합)</strong>가 자동 계산되며, 빈칸 클릭 시 바로 수정할 수 있습니다.</p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 p-1 rounded-xl px-3">
+                <History size={16} className="text-gray-400"/>
+                <input type="text" value={ratioYear} onChange={e=>setRatioYear(e.target.value)} className="w-16 bg-transparent text-sm font-bold text-center outline-none" />년
+                <select value={ratioSem} onChange={e=>setRatioSem(e.target.value)} className="bg-transparent text-sm font-bold outline-none ml-2">
+                  <option value="1">1학기</option>
+                  <option value="2">2학기</option>
+                </select>
               </div>
+            </div>
+          </div>
 
-              <div className="w-full">
-                {[1, 2, 3].map(g => {
-                  const gradeRatios = displayRatios.filter(r => String(r.grade) === String(g));
+          <div className="w-full">
+            {[1, 2, 3].map(g => {
+              const gradeRatios = displayRatios.filter(r => String(r.grade) === String(g));
                   const newRows = newRatioRows.filter(r => String(r.grade) === String(g) && String(r.year) === String(ratioYear) && String(r.semester) === String(ratioSem));
                   
                   if (gradeRatios.length === 0 && newRows.length === 0) {
@@ -1332,20 +1334,20 @@ export default function App() {
           )}
 
           {/* 시험 범위 입력 화면 */}
-          {viewMode === 'scope' && (
-            <div className="w-full max-w-5xl animate-fade-in mt-4">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 px-2">
-                <div>
-                  <button type="button" onClick={() => setViewMode('home')} className="mb-3 text-xs font-black text-gray-500 hover:text-indigo-600 bg-white hover:bg-indigo-50 border border-gray-200 hover:border-indigo-200 px-3 py-2 rounded-xl transition-all shadow-sm">← 첫 화면으로</button>
-                  <h2 className="text-2xl font-black text-gray-800 flex items-center gap-2"><CalendarDays className="text-indigo-600"/> {activeScope.year}년 {activeScope.semester}학기 {activeScope.examName} 범위 입력</h2>
-                  <p className="text-gray-500 text-sm font-medium mt-1">담당 과목의 [입력/수정] 버튼을 눌러주세요.</p>
-                </div>
-              </div>
-              {renderScheduleTable(inputScheduleToDisplay, inputScopes, inputVYear, inputVSem, inputVExam, false)}
+      {viewMode === 'scope' && (
+        <div className="w-full max-w-5xl animate-fade-in mt-4">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 px-2">
+            <div>
+              <button type="button" onClick={() => setViewMode('home')} className="mb-3 text-xs font-black text-gray-500 hover:text-indigo-600 bg-white hover:bg-indigo-50 border border-gray-200 hover:border-indigo-200 px-3 py-2 rounded-xl transition-all shadow-sm">← 첫 화면으로</button>
+              <h2 className="text-2xl font-black text-gray-800 flex items-center gap-2"><CalendarDays className="text-indigo-600"/> {activeScope.year}년 {activeScope.semester}학기 {activeScope.examName} 범위 입력</h2>
+              <p className="text-gray-500 text-sm font-medium mt-1">담당 과목의 [입력/수정] 버튼을 눌러주세요.</p>
             </div>
-          )}
+          </div>
+          {renderScheduleTable(false)}
+        </div>
+      )}
 
-          {/* 추정분할 점수 입력 화면 */}
+      {/* 추정분할 점수 입력 화면 */}
           {viewMode === 'cutoff' && (
             <div className="w-full max-w-md bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] overflow-hidden border border-white relative mt-4">
               <div className="px-6 pt-5 pb-0 print:hidden">
@@ -1509,28 +1511,28 @@ export default function App() {
               )}
 
               {statusTab === 'scope' && (
-                <div className="animate-fade-in print:block">
-                  <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
-                    [시험 범위표] {formatExamOption(viewingExamKey)}
-                  </div>
-                  <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-3xl font-black tracking-widest">{vYear}학년도 {vSem}학기 {vExam} 시험 범위</h2></div>
-                  {renderScheduleTable(scheduleToDisplay, viewingScopes, vYear, vSem, vExam, true)}
-                </div>
-              )}
-
-              {statusTab === 'cutoff' && (
-                <div className="animate-fade-in print:block">
-                  <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
-                    [추정분할 점수 현황] {formatExamOption(viewingExamKey)}
-                  </div>
-                  <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-3xl font-black tracking-widest">{vYear}학년도 {vSem}학기 {vExam} 추정분할 점수</h2></div>
-                  {renderCutoffTable(uniqueSubjectGrades, viewingCutoffs, vYear, vSem, vExam, true)}
-                </div>
-              )}
+            <div className="animate-fade-in print:block">
+              <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
+                [시험 범위표] {formatExamOption(viewingExamKey)}
+              </div>
+              <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-3xl font-black tracking-widest">{vYear}학년도 {vSem}학기 {vExam} 시험 범위</h2></div>
+              {renderScheduleTable(true)}
             </div>
           )}
 
-          {/* 관리자 설정 화면 */}
+          {statusTab === 'cutoff' && (
+            <div className="animate-fade-in print:block">
+              <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
+                [추정분할 점수 현황] {formatExamOption(viewingExamKey)}
+              </div>
+              <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-3xl font-black tracking-widest">{vYear}학년도 {vSem}학기 {vExam} 추정분할 점수</h2></div>
+              {renderCutoffTable(true)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 관리자 설정 화면 */}
           {viewMode === 'admin' && !isAdminUnlocked && (
             <div className="w-full max-w-sm bg-white rounded-[2rem] shadow-xl p-8 mt-12 animate-fade-in text-center border border-gray-100 print:hidden">
               <div className="bg-blue-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><Lock className="text-blue-500" size={28}/></div>
