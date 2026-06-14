@@ -750,6 +750,120 @@ export default function App() {
     });
   };
 
+
+  const addSubject = () => {
+    const name = newSubject.trim();
+    if (!name) return;
+
+    const subjects = Array.isArray(adminData.subjects) ? adminData.subjects.filter(Boolean) : [];
+
+    if (subjects.some(s => s.name === name)) {
+      setAdminMessage({ type: 'error', text: '이미 등록된 과목입니다.' });
+      setTimeout(() => setAdminMessage({ type: '', text: '' }), 3000);
+      return;
+    }
+
+    setAdminData(prev => ({
+      ...prev,
+      subjects: [
+        ...(Array.isArray(prev.subjects) ? prev.subjects.filter(Boolean) : []),
+        { name, teachers: [] }
+      ]
+    }));
+
+    setNewSubject('');
+    setAdminMessage({ type: 'success', text: '과목이 추가되었습니다. 꼭 [저장하기]를 누르세요.' });
+    setTimeout(() => setAdminMessage({ type: '', text: '' }), 3000);
+  };
+
+  const removeSubject = (subjectName) => {
+    setAdminData(prev => ({
+      ...prev,
+      subjects: (Array.isArray(prev.subjects) ? prev.subjects : [])
+        .filter(s => s && s.name !== subjectName)
+    }));
+  };
+
+  const addTeacherToSubject = (subjectName) => {
+    const teacherName = String(newTeachers[subjectName] || '').trim();
+    if (!teacherName) return;
+
+    setAdminData(prev => ({
+      ...prev,
+      subjects: (Array.isArray(prev.subjects) ? prev.subjects : []).map(subject => {
+        if (!subject || subject.name !== subjectName) return subject;
+
+        const teachers = Array.isArray(subject.teachers) ? subject.teachers.filter(Boolean) : [];
+        if (teachers.includes(teacherName)) return subject;
+
+        return {
+          ...subject,
+          teachers: [...teachers, teacherName]
+        };
+      })
+    }));
+
+    setNewTeachers(prev => ({
+      ...prev,
+      [subjectName]: ''
+    }));
+  };
+
+  const removeTeacherFromSubject = (subjectName, teacherName) => {
+    setAdminData(prev => ({
+      ...prev,
+      subjects: (Array.isArray(prev.subjects) ? prev.subjects : []).map(subject => {
+        if (!subject || subject.name !== subjectName) return subject;
+
+        return {
+          ...subject,
+          teachers: (Array.isArray(subject.teachers) ? subject.teachers : [])
+            .filter(t => t !== teacherName)
+        };
+      })
+    }));
+  };
+
+  const updateChecklistStatus = (id, status) => {
+    setAdminData(prev => ({
+      ...prev,
+      checklist: (Array.isArray(prev.checklist) ? prev.checklist : defaultChecklistData).map(item => {
+        if (!item || item.id !== id) return item;
+        return { ...item, status };
+      })
+    }));
+  };
+
+  const removeChecklistItem = (id) => {
+    setAdminData(prev => ({
+      ...prev,
+      checklist: (Array.isArray(prev.checklist) ? prev.checklist : defaultChecklistData)
+        .filter(item => item && item.id !== id)
+    }));
+  };
+
+  const addChecklistItem = () => {
+    const text = newChecklistText.trim();
+    if (!text) return;
+
+    const newItem = {
+      id: Date.now(),
+      type: newChecklistType,
+      text,
+      ...(newChecklistType !== 'category' ? { status: 'O' } : {})
+    };
+
+    setAdminData(prev => ({
+      ...prev,
+      checklist: [
+        ...(Array.isArray(prev.checklist) ? prev.checklist.filter(Boolean) : defaultChecklistData),
+        newItem
+      ]
+    }));
+
+    setNewChecklistText('');
+  };
+
   const ratioKeys = new Set(assessmentRatios.map(s => `${s.year}|${s.semester}`));
   ratioKeys.add(`${activeRatio.year}|${activeRatio.semester}`); ratioKeys.add('2026|1'); 
   const ratioOptions = Array.from(ratioKeys).sort((a,b) => String(b).localeCompare(String(a)));
