@@ -156,8 +156,9 @@ const formatExamOption = (opt) => {
   return `${y}년 ${s}학기 ${e === 'undefined' || !e ? '' : e}`;
 };
 
+// 💡 1. 사라진 기존 시험 범위 데이터 복구: 기존 ID 방식(일자, 교시 포함)으로 되돌립니다.
 const getScopeId = (vYear, vSem, vExam, item) => {
-  return `${vYear}_${vSem}_${vExam}_${item?.grade||''}_${item?.subject||''}`.replace(/\s/g, '');
+  return `${vYear}_${vSem}_${vExam}_${item?.date||''}_${item?.grade||''}_${item?.period||''}_${item?.subject||''}`.replace(/\s/g, '');
 };
 
 const SignaturePad = ({ onSave, resetTrigger }) => {
@@ -459,49 +460,40 @@ export default function App() {
     }
   }, [activeCutoff, localCutoffExam]);
 
-  // 1. Determine which year/sem/exam to use based on viewMode
-  let vRatioYear, vRatioSem;
-  let vYear, vSem, vExam;
-
-  if (viewMode === 'status') {
-    const ratioParts = (viewingRatioKey || `${activeRatio.year}|${activeRatio.semester}`).split('|');
-    vRatioYear = ratioParts[0]; vRatioSem = ratioParts[1];
-    
-    const examParts = (viewingExamKey || `${activeSig.year}|${activeSig.semester}|${activeSig.examName}`).split('|');
-    vYear = examParts[0]; vSem = examParts[1]; vExam = examParts[2] || '';
+  const [vRatioYear, vRatioSem] = (viewingRatioKey || `${activeRatio.year}|${activeRatio.semester}`).split('|');
+  
+  let currentVYear, currentVSem, currentVExam;
+  if (viewMode === 'scope') {
+    currentVYear = String(activeScope.year || ''); currentVSem = String(activeScope.semester || ''); currentVExam = String(activeScope.examName || '');
+  } else if (viewMode === 'cutoff') {
+    currentVYear = String(activeCutoff.year || ''); currentVSem = String(activeCutoff.semester || ''); currentVExam = localCutoffExam || String(activeCutoff.examName || '');
+  } else if (viewMode === 'teacher') {
+    currentVYear = String(activeSig.year || ''); currentVSem = String(activeSig.semester || ''); currentVExam = String(activeSig.examName || '');
   } else {
-    vRatioYear = String(ratioYear); vRatioSem = String(ratioSem);
-    if (viewMode === 'scope') {
-      vYear = String(activeScope.year || ''); vSem = String(activeScope.semester || ''); vExam = String(activeScope.examName || '');
-    } else if (viewMode === 'cutoff') {
-      vYear = String(activeCutoff.year || ''); vSem = String(activeCutoff.semester || ''); vExam = localCutoffExam || String(activeCutoff.examName || '');
-    } else {
-      vYear = String(activeSig.year || ''); vSem = String(activeSig.semester || ''); vExam = String(activeSig.examName || '');
-    }
+    const parts = (viewingExamKey || `${activeSig.year}|${activeSig.semester}|${activeSig.examName}`).split('|');
+    currentVYear = parts[0]; currentVSem = parts[1]; currentVExam = parts[2] || '';
   }
+  const currentExamKey = `${currentVYear}|${currentVSem}|${currentVExam}`;
+  const vYear = currentVYear; const vSem = currentVSem; const vExam = currentVExam;
 
-  const currentExamKey = `${vYear}|${vSem}|${vExam}`;
-
-  // 2. Filter records based on vYear, vSem, vExam
   const viewingSignatures = allSignatures.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
   const viewingScopes = examScopes.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
   const viewingCutoffs = examCutoffs.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
-
-  // Status Schedule & Subject extraction
-  let scheduleToDisplay = globalSettings.schedules?.[currentExamKey];
-  if (!scheduleToDisplay || scheduleToDisplay.length === 0) {
+  
+  // 💡 2. 빈 값(null) 필터링: 배열을 다루기 전 안전하게 방어
+  let scheduleToDisplay = (globalSettings.schedules?.[currentExamKey] || []).filter(Boolean);
+  if (scheduleToDisplay.length === 0) {
     const legacyKey = `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`;
-    if (currentExamKey === legacyKey && globalSettings.examSchedule?.length > 0) scheduleToDisplay = globalSettings.examSchedule;
+    if (currentExamKey === legacyKey && globalSettings.examSchedule?.length > 0) scheduleToDisplay = (globalSettings.examSchedule || []).filter(Boolean);
   }
-  if ((!scheduleToDisplay || scheduleToDisplay.length === 0) && viewingScopes.length > 0) {
+  if (scheduleToDisplay.length === 0 && viewingScopes.length > 0) {
     const recoveredMap = new Map();
     viewingScopes.forEach(s => {
       const key = `${s.date || ''}_${s.grade || ''}_${s.period || ''}_${s.subject || ''}`;
       if (!recoveredMap.has(key)) recoveredMap.set(key, { id: s.id, date: s.date || '-', grade: s.grade, period: s.period || '-', subject: s.subject });
     });
-    scheduleToDisplay = Array.from(recoveredMap.values()).sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || String(a.grade || '').localeCompare(String(b.grade || '')) || String(a.period || '').localeCompare(String(b.period || '')));
+    scheduleToDisplay = Array.from(recoveredMap.values()).filter(Boolean).sort((a, b) => String(a?.date || '').localeCompare(String(b?.date || '')) || String(a?.grade || '').localeCompare(String(b?.grade || '')) || String(a?.period || '').localeCompare(String(b?.period || '')));
   }
-  scheduleToDisplay = scheduleToDisplay || [];
 
   let subjectsToDisplay = Array.isArray(globalSettings.subjects) ? globalSettings.subjects.map(s => {
     const submittedTeachers = [...new Set(viewingSignatures.filter(sig => sig.subject === s.name).map(sig => sig.teacherName))];
@@ -515,37 +507,53 @@ export default function App() {
     }
   });
 
-  let uniqueSubjectGrades = [];
-  if (vExam === '수행평가') {
-    const perfKey = `${vYear}|${vSem}`;
-    let perfList = globalSettings.perfSchedules?.[perfKey] || [];
+  let cutoffSubjectOptions = [];
+  if (localCutoffExam === '수행평가') {
+    const perfKey = `${activeCutoff.year}|${activeCutoff.semester}`;
+    let perfList = (globalSettings.perfSchedules?.[perfKey] || []).filter(Boolean);
     const formUniqueMap = new Map();
-    perfList.forEach(item => { formUniqueMap.set(`${item.grade || ''}|${item.subject || ''}`, { grade: item.grade, subject: item.subject }); });
-    const formCutoffs = examCutoffs.filter(c => String(c.year) === vYear && String(c.semester) === vSem && String(c.examName) === '수행평가');
-    formCutoffs.forEach(c => { formUniqueMap.set(`${c.grade || ''}|${c.subject || ''}`, { grade: c.grade, subject: c.subject }); });
-    uniqueSubjectGrades = Array.from(formUniqueMap.values()).sort((a,b) => String(a.grade || '').localeCompare(String(b.grade || '')) || String(a.subject || '').localeCompare(String(b.subject || '')));
+    perfList.forEach(item => { formUniqueMap.set(`${item?.grade || ''}|${item?.subject || ''}`, { grade: item?.grade, subject: item?.subject }); });
+    const formCutoffs = examCutoffs.filter(c => String(c.year) === String(activeCutoff.year) && String(c.semester) === String(activeCutoff.semester) && String(c.examName) === '수행평가');
+    formCutoffs.forEach(c => { formUniqueMap.set(`${c?.grade || ''}|${c?.subject || ''}`, { grade: c?.grade, subject: c?.subject }); });
+    cutoffSubjectOptions = Array.from(formUniqueMap.values()).filter(Boolean).sort((a,b) => String(a?.grade || '').localeCompare(String(b?.grade || '')) || String(a?.subject || '').localeCompare(String(b?.subject || '')));
   } else {
-    const formExamKey = `${vYear}|${vSem}|${vExam}`;
-    let formSchedule = globalSettings.schedules?.[formExamKey] || [];
+    const formExamKey = `${activeCutoff.year}|${activeCutoff.semester}|${localCutoffExam}`;
+    let formSchedule = (globalSettings.schedules?.[formExamKey] || []).filter(Boolean);
     if (formSchedule.length === 0 && formExamKey === `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`) {
-      formSchedule = globalSettings.examSchedule || [];
+      formSchedule = (globalSettings.examSchedule || []).filter(Boolean);
     }
-    const formScopes = examScopes.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
+    const formScopes = examScopes.filter(s => String(s.year) === String(activeCutoff.year) && String(s.semester) === String(activeCutoff.semester) && String(s.examName) === localCutoffExam);
     if (formSchedule.length === 0 && formScopes.length > 0) {
       const recoveredMap = new Map();
       formScopes.forEach(s => {
         const key = `${s.grade}_${s.subject}`;
         if (!recoveredMap.has(key)) recoveredMap.set(key, { grade: s.grade, subject: s.subject });
       });
-      formSchedule = Array.from(recoveredMap.values());
+      formSchedule = Array.from(recoveredMap.values()).filter(Boolean);
     }
     const formUniqueMap = new Map();
-    formSchedule.forEach(item => { formUniqueMap.set(`${item.grade || ''}|${item.subject || ''}`, { grade: item.grade, subject: item.subject }); });
-    const formCutoffs = examCutoffs.filter(c => String(c.year) === vYear && String(c.semester) === vSem && String(c.examName) === vExam);
-    formCutoffs.forEach(c => { formUniqueMap.set(`${c.grade || ''}|${c.subject || ''}`, { grade: c.grade, subject: c.subject }); });
-    uniqueSubjectGrades = Array.from(formUniqueMap.values()).sort((a,b) => String(a.grade || '').localeCompare(String(b.grade || '')) || String(a.subject || '').localeCompare(String(b.subject || '')));
+    formSchedule.forEach(item => { formUniqueMap.set(`${item?.grade || ''}|${item?.subject || ''}`, { grade: item?.grade, subject: item?.subject }); });
+    const formCutoffs = examCutoffs.filter(c => String(c.year) === String(activeCutoff.year) && String(c.semester) === String(activeCutoff.semester) && String(c.examName) === localCutoffExam);
+    formCutoffs.forEach(c => { formUniqueMap.set(`${c?.grade || ''}|${c?.subject || ''}`, { grade: c?.grade, subject: c?.subject }); });
+    cutoffSubjectOptions = Array.from(formUniqueMap.values()).filter(Boolean).sort((a,b) => String(a?.grade || '').localeCompare(String(b?.grade || '')) || String(a?.subject || '').localeCompare(String(b?.subject || '')));
   }
-  let cutoffSubjectOptions = uniqueSubjectGrades;
+
+  let statusUniqueSubjectGrades = [];
+  if (vExam === '수행평가') {
+    const perfKey = `${vYear}|${vSem}`;
+    let perfList = (globalSettings.perfSchedules?.[perfKey] || []).filter(Boolean);
+    const formUniqueMap = new Map();
+    perfList.forEach(item => { formUniqueMap.set(`${item?.grade || ''}|${item?.subject || ''}`, { grade: item?.grade, subject: item?.subject }); });
+    const formCutoffs = examCutoffs.filter(c => String(c.year) === vYear && String(c.semester) === vSem && String(c.examName) === '수행평가');
+    formCutoffs.forEach(c => { formUniqueMap.set(`${c?.grade || ''}|${c?.subject || ''}`, { grade: c?.grade, subject: c?.subject }); });
+    statusUniqueSubjectGrades = Array.from(formUniqueMap.values()).filter(Boolean).sort((a,b) => String(a?.grade || '').localeCompare(String(b?.grade || '')) || String(a?.subject || '').localeCompare(String(b?.subject || '')));
+  } else {
+    const formUniqueMap = new Map();
+    scheduleToDisplay.forEach(item => { formUniqueMap.set(`${item?.grade || ''}|${item?.subject || ''}`, { grade: item?.grade, subject: item?.subject }); });
+    const formCutoffs = examCutoffs.filter(c => String(c.year) === vYear && String(c.semester) === vSem && String(c.examName) === vExam);
+    formCutoffs.forEach(c => { formUniqueMap.set(`${c?.grade || ''}|${c?.subject || ''}`, { grade: c?.grade, subject: c?.subject }); });
+    statusUniqueSubjectGrades = Array.from(formUniqueMap.values()).filter(Boolean).sort((a,b) => String(a?.grade || '').localeCompare(String(b?.grade || '')) || String(a?.subject || '').localeCompare(String(b?.subject || '')));
+  }
 
   const handleTeacherSubmit = async (e) => {
     e.preventDefault();
@@ -612,7 +620,6 @@ export default function App() {
     setIsSaving(false);
   };
 
-  // Ratio Tab
   const inputRatiosData = (assessmentRatios || []).filter(r => String(r?.year || '') === String(ratioYear) && String(r?.semester || '') === String(ratioSem));
   let displayRatios = [];
   if (String(ratioYear) === '2026' && String(ratioSem) === '1') {
@@ -852,10 +859,15 @@ export default function App() {
   const removeChecklistItem = (id) => { setAdminData(prev => ({ ...prev, checklist: (prev.checklist || defaultChecklistData).filter(item => item.id !== id) })); };
   const updateChecklistStatus = (id, newStatus) => { setAdminData(prev => ({ ...prev, checklist: (prev.checklist || defaultChecklistData).map(item => item.id === id ? { ...item, status: newStatus } : item ) })); };
 
-  const renderScheduleTable = (isPrintView = false) => {
-    if (!scheduleToDisplay || scheduleToDisplay.length === 0) return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">등록된 시험 시간표가 없습니다.</div>;
+  const renderScheduleTable = (scheduleData, scopesData, y, s, e, isPrintView = false) => {
+    if (!scheduleData || scheduleData.length === 0) return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">등록된 시험 시간표가 없습니다.</div>;
     const dateSpans = {}; const gradeSpans = {};
-    scheduleToDisplay.forEach(item => { dateSpans[item.date] = (dateSpans[item.date] || 0) + 1; const gradeKey = `${item.date}_${item.grade}`; gradeSpans[gradeKey] = (gradeSpans[gradeKey] || 0) + 1; });
+    scheduleData.forEach(item => { 
+      if(!item) return;
+      dateSpans[item.date] = (dateSpans[item.date] || 0) + 1; 
+      const gradeKey = `${item.date}_${item.grade}`; 
+      gradeSpans[gradeKey] = (gradeSpans[gradeKey] || 0) + 1; 
+    });
     const renderedDates = new Set(); const renderedGrades = new Set();
 
     return (
@@ -872,8 +884,9 @@ export default function App() {
             </tr>
           </thead>
           <tbody>
-            {scheduleToDisplay.map((item, idx) => {
-              const scopeId = getScopeId(vYear, vSem, vExam, item); const scopeDoc = viewingScopes.find(s => s.id === scopeId); const gradeKey = `${item.date}_${item.grade}`;
+            {scheduleData.map((item, idx) => {
+              if(!item) return null;
+              const scopeId = getScopeId(y, s, e, item); const scopeDoc = (scopesData || []).find(sc => sc.id === scopeId); const gradeKey = `${item.date}_${item.grade}`;
               const showDate = !renderedDates.has(item.date); if (showDate) renderedDates.add(item.date);
               const showGrade = !renderedGrades.has(gradeKey); if (showGrade) renderedGrades.add(gradeKey);
               return (
@@ -902,11 +915,11 @@ export default function App() {
     );
   };
 
-  const renderCutoffTable = (isPrintView = false) => {
-    const submittedCutoffs = uniqueSubjectGrades.map(item => {
+  const renderCutoffTable = (uniqueSubjectsData, cutoffsData, y, s, e, isPrintView = false) => {
+    const submittedCutoffs = (uniqueSubjectsData || []).map(item => {
       if (!item) return null;
-      const docId = `${vYear}_${vSem}_${vExam}_${item.grade}_${item.subject}`.replace(/\s/g, '');
-      const doc = viewingCutoffs.find(c => c.id === docId);
+      const docId = `${y}_${s}_${e}_${item?.grade || ''}_${item?.subject || ''}`.replace(/\s/g, '');
+      const doc = (cutoffsData || []).find(c => c.id === docId);
       return doc ? { ...item, ...doc } : null;
     }).filter(Boolean);
 
@@ -957,7 +970,6 @@ export default function App() {
         const found = currentStatusRatios.find(r => r.subject === def.subject && String(r.grade) === String(def.grade));
         return found ? found : { ...def, year: '2026', semester: '1', id: `def_status_2026_1_${def.grade}_${def.subject}`.replace(/\s/g, '') };
       });
-      // 💡 여기서 displayStatusRatios에 바로 push하지 않고, filter로 중복을 완전히 제거한 후 추가합니다.
       const toAdd = currentStatusRatios.filter(r => !displayStatusRatios.some(d => d.subject === r.subject && String(d.grade) === String(r.grade)));
       displayStatusRatios = [...displayStatusRatios, ...toAdd];
     } else {
@@ -1343,7 +1355,7 @@ export default function App() {
               <p className="text-gray-500 text-sm font-medium mt-1">담당 과목의 [입력/수정] 버튼을 눌러주세요.</p>
             </div>
           </div>
-          {renderScheduleTable(false)}
+          {renderScheduleTable(inputScheduleToDisplay, inputScopes, inputVYear, inputVSem, inputVExam, false)}
         </div>
       )}
 
@@ -1511,28 +1523,28 @@ export default function App() {
               )}
 
               {statusTab === 'scope' && (
-            <div className="animate-fade-in print:block">
-              <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
-                [시험 범위표] {formatExamOption(viewingExamKey)}
-              </div>
-              <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-3xl font-black tracking-widest">{vYear}학년도 {vSem}학기 {vExam} 시험 범위</h2></div>
-              {renderScheduleTable(true)}
+                <div className="animate-fade-in print:block">
+                  <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
+                    [시험 범위표] {formatExamOption(viewingExamKey)}
+                  </div>
+                  <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-3xl font-black tracking-widest">{vYear}학년도 {vSem}학기 {vExam} 시험 범위</h2></div>
+                  {renderScheduleTable(statusScheduleToDisplay, statusScopes, statusYear, statusSem, statusExam, true)}
+                </div>
+              )}
+
+              {statusTab === 'cutoff' && (
+                <div className="animate-fade-in print:block">
+                  <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
+                    [추정분할 점수 현황] {formatExamOption(viewingExamKey)}
+                  </div>
+                  <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-3xl font-black tracking-widest">{vYear}학년도 {vSem}학기 {vExam} 추정분할 점수</h2></div>
+                  {renderCutoffTable(statusUniqueSubjectGrades, statusCutoffs, statusYear, statusSem, statusExam, true)}
+                </div>
+              )}
             </div>
           )}
 
-          {statusTab === 'cutoff' && (
-            <div className="animate-fade-in print:block">
-              <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
-                [추정분할 점수 현황] {formatExamOption(viewingExamKey)}
-              </div>
-              <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-3xl font-black tracking-widest">{vYear}학년도 {vSem}학기 {vExam} 추정분할 점수</h2></div>
-              {renderCutoffTable(true)}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 관리자 설정 화면 */}
+          {/* 관리자 설정 화면 */}
           {viewMode === 'admin' && !isAdminUnlocked && (
             <div className="w-full max-w-sm bg-white rounded-[2rem] shadow-xl p-8 mt-12 animate-fade-in text-center border border-gray-100 print:hidden">
               <div className="bg-blue-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><Lock className="text-blue-500" size={28}/></div>
