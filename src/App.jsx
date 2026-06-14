@@ -487,6 +487,32 @@ export default function App() {
   const viewingScopes = examScopes.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
   const viewingCutoffs = examCutoffs.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
 
+  useEffect(() => {
+    if (!cutoffSubjectGrade) {
+      setCutoffScores({ ab: '', bc: '', cd: '', de: '', ei: '' });
+      setCutoffTeacher('');
+      return;
+    }
+
+    const [g, subjectName] = cutoffSubjectGrade.split('|');
+    const docId = `${vYear}_${vSem}_${vExam}_${g}_${subjectName}`.replace(/\s/g, '');
+    const existingCutoff = (examCutoffs || []).find(c => c.id === docId);
+
+    if (existingCutoff) {
+      setCutoffScores({
+        ab: existingCutoff.ab || '',
+        bc: existingCutoff.bc || '',
+        cd: existingCutoff.cd || '',
+        de: existingCutoff.de || '',
+        ei: existingCutoff.ei || ''
+      });
+      setCutoffTeacher(existingCutoff.teacherName || '');
+    } else {
+      setCutoffScores({ ab: '', bc: '', cd: '', de: '', ei: '' });
+      setCutoffTeacher('');
+    }
+  }, [cutoffSubjectGrade, vYear, vSem, vExam, examCutoffs]);
+
   // 💡 관리자 설정 및 화면을 그릴 때 존재할 수 있는 모든 null/undefined 객체를 완전히 필터링
   let scheduleToDisplay = (globalSettings.schedules?.[currentExamKey] || []).filter(Boolean);
   if (scheduleToDisplay.length === 0) {
@@ -603,6 +629,8 @@ export default function App() {
         alert("추정분할 점수가 안전하게 저장되었습니다.");
       }
       setCutoffSubjectGrade('');
+      setCutoffScores({ ab: '', bc: '', cd: '', de: '', ei: '' });
+      setCutoffTeacher('');
     } catch(err) { alert("저장 중 오류가 발생했습니다."); }
     setIsSaving(false);
   };
@@ -864,6 +892,31 @@ export default function App() {
     setNewChecklistText('');
   };
 
+  const deleteCutoffRecord = async (cutoffRecord) => {
+    if (!cutoffRecord?.id) return;
+    const label = `${cutoffRecord.examName || ''} / ${cutoffRecord.subject || ''}(${cutoffRecord.grade || ''}학년)`;
+    if (!confirm(`${label} 추정분할 기록을 삭제하시겠습니까?\n삭제 후 해당 과목은 다시 입력할 수 있습니다.`)) return;
+
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examCutoffs', cutoffRecord.id));
+      setAdminMessage({ type: 'success', text: '추정분할 기록이 삭제되었습니다. 해당 과목은 다시 입력할 수 있습니다.' });
+      setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000);
+
+      const currentDocId = cutoffSubjectGrade
+        ? `${vYear}_${vSem}_${vExam}_${cutoffSubjectGrade.split('|')[0]}_${cutoffSubjectGrade.split('|')[1]}`.replace(/\s/g, '')
+        : '';
+      if (currentDocId === cutoffRecord.id) {
+        setCutoffSubjectGrade('');
+        setCutoffScores({ ab: '', bc: '', cd: '', de: '', ei: '' });
+        setCutoffTeacher('');
+      }
+    } catch (error) {
+      console.error(error);
+      setAdminMessage({ type: 'error', text: '추정분할 기록 삭제 중 오류가 발생했습니다.' });
+      setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000);
+    }
+  };
+
   const ratioKeys = new Set(assessmentRatios.map(s => `${s.year}|${s.semester}`));
   ratioKeys.add(`${activeRatio.year}|${activeRatio.semester}`); ratioKeys.add('2026|1'); 
   const ratioOptions = Array.from(ratioKeys).sort((a,b) => String(b).localeCompare(String(a)));
@@ -875,6 +928,18 @@ export default function App() {
   examKeys.add(`${activeScope.year}|${activeScope.semester}|${activeScope.examName}`);
   examKeys.add(`${activeCutoff.year}|${activeCutoff.semester}|${activeCutoff.examName}`);
   const examOptions = Array.from(examKeys).sort((a,b) => String(b).localeCompare(String(a))); 
+
+  // 관리자모드에서는 현재 기본연도/학기와 관계없이 저장된 추정분할 기록 전체를 보여준다.
+  // 기존에 입력해 둔 과목이 기본연도 설정과 달라도 삭제할 수 있어야 하기 때문이다.
+  const adminCutoffRecords = (examCutoffs || [])
+    .filter(Boolean)
+    .sort((a, b) =>
+      String(b?.year || '').localeCompare(String(a?.year || '')) ||
+      String(b?.semester || '').localeCompare(String(a?.semester || '')) ||
+      String(a?.examName || '').localeCompare(String(b?.examName || '')) ||
+      String(a?.grade || '').localeCompare(String(b?.grade || '')) ||
+      String(a?.subject || '').localeCompare(String(b?.subject || ''))
+    );
 
   const escapeCSV = (value) => { if (value === null || value === undefined) return ''; return `"${String(value).replace(/"/g, '""')}"`; };
 
@@ -1036,7 +1101,7 @@ export default function App() {
               <th className="border-2 border-black p-2 bg-gray-100 font-black w-20">C/D</th>
               <th className="border-2 border-black p-2 bg-gray-100 font-black w-20">D/E</th>
               <th className="border-2 border-black p-2 bg-gray-100 font-black w-20">E/I</th>
-              {!isPrintView && <th className="border-2 border-black p-2 bg-gray-100 font-black w-32 print:hidden">기록 정보</th>}
+              {!isPrintView && <th className="border-2 border-black p-2 bg-gray-100 font-black w-32 print:hidden">입력자 / 수정시간</th>}
             </tr>
           </thead>
           <tbody>
@@ -1050,7 +1115,7 @@ export default function App() {
                 <td className="border border-black p-2 font-medium text-gray-800">{String(item.ei || '')}</td>
                 {!isPrintView && (
                   <td className="border border-black p-2 text-[10px] text-gray-500 leading-tight print:hidden">
-                    {String(item.teacherName || '-')}<br/>({getDisplayDate(item)})
+                    {String(item.teacherName || '입력자 정보 없음')}<br/>({getDisplayDate(item) || '시간 정보 없음'})
                   </td>
                 )}
               </tr>
@@ -1638,7 +1703,7 @@ export default function App() {
                     [추정분할 점수 현황] {formatExamOption(viewingExamKey)}
                   </div>
                   <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-3xl font-black tracking-widest">{String(vYear)}학년도 {String(vSem)}학기 {String(vExam)} 추정분할 점수</h2></div>
-                  {renderCutoffTable(cutoffSubjectOptions, viewingCutoffs, vYear, vSem, vExam, true)}
+                  {renderCutoffTable(cutoffSubjectOptions, viewingCutoffs, vYear, vSem, vExam, false)}
                 </div>
               )}
             </div>
@@ -1701,6 +1766,40 @@ export default function App() {
                       <input type="text" value={adminData.activeSettings?.cutoff?.year || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, cutoff: {...p.activeSettings.cutoff, year: e.target.value}}}))} className="w-1/2 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-rose-500 outline-none" placeholder="연도"/>
                       <select value={adminData.activeSettings?.cutoff?.semester || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, cutoff: {...p.activeSettings.cutoff, semester: e.target.value}}}))} className="w-1/2 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-rose-500 outline-none"><option value="1">1학기</option><option value="2">2학기</option></select>
                     </div>
+                  </div>
+                </div>
+
+                {/* 입력된 추정분할 기록 삭제 영역 */}
+                <div className="pt-4 border-t border-gray-100">
+                  <h3 className="text-lg font-black text-gray-800 mb-2 flex items-center gap-2">
+                    <Trash2 size={20} className="text-rose-500"/>
+                    저장된 추정분할 기록 삭제 <span className="ml-2 text-xs bg-rose-100 text-rose-700 px-2 py-1 rounded-full">{adminCutoffRecords.length}건</span>
+                  </h3>
+                  <p className="text-xs text-rose-700 mb-4 font-bold bg-rose-50 inline-block px-3 py-1.5 rounded-lg border border-rose-100">
+                    💡 현재 기본연도/학기와 관계없이 저장된 모든 추정분할 기록을 보여줍니다. 잘못 입력된 과목만 삭제하면 다시 입력할 수 있습니다.
+                  </p>
+                  <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar pr-2 mb-6">
+                    {adminCutoffRecords.length === 0 && <p className="text-center text-sm text-gray-400 py-4 bg-gray-50 rounded-xl border border-gray-100">저장된 추정분할 기록이 없습니다.</p>}
+                    {adminCutoffRecords.map(record => (
+                      <div key={record.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-xl border border-gray-200 shadow-sm hover:border-rose-200 text-sm">
+                        <div className="min-w-0">
+                          <div className="font-black text-gray-800 truncate">
+                            <span className="text-rose-700">{String(record.year || '-')}년 {String(record.semester || '-')}학기 {String(record.examName || '-')}</span>
+                            <span className="mx-2 text-gray-300">|</span>
+                            {String(record.subject || '')} ({String(record.grade || '')}학년)
+                          </div>
+                          <div className="text-[11px] text-gray-500 mt-1">
+                            입력자: <strong>{String(record.teacherName || '입력자 정보 없음')}</strong> · 입력/수정: {getDisplayDate(record) || '시간 정보 없음'}
+                          </div>
+                          <div className="text-[11px] text-gray-400 mt-1">
+                            A/B {String(record.ab || '-')} · B/C {String(record.bc || '-')} · C/D {String(record.cd || '-')} · D/E {String(record.de || '-')} · E/I {String(record.ei || '-')}
+                          </div>
+                        </div>
+                        <button type="button" onClick={() => deleteCutoffRecord(record)} className="shrink-0 bg-red-50 text-red-600 border border-red-200 hover:bg-red-600 hover:text-white px-4 py-2 rounded-lg font-black text-xs transition-all flex items-center justify-center gap-1">
+                          <Trash2 size={14}/> 삭제
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
