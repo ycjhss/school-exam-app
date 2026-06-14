@@ -442,11 +442,11 @@ export default function App() {
     return () => { unsubSigs(); unsubPrints(); unsubScopes(); unsubCutoffs(); unsubRatios(); };
   }, [user]);
 
-  // 💡 데이터베이스에 저장된 암호가 숫자형일 수 있으므로 무조건 문자열로 씌워서 비교하도록 보강
+  // 💡 관리자 비밀번호 검증 시 모두 String으로 감싸서 엄격하게 비교 (에러 완벽 방지)
   const handleUnlockAdmin = (e) => {
     e.preventDefault();
     const currentPassword = String(globalSettings.adminPassword || '1234');
-    if (pinInput === currentPassword) { setIsAdminUnlocked(true); setPinError(false); setPinInput(''); } 
+    if (String(pinInput) === currentPassword) { setIsAdminUnlocked(true); setPinError(false); setPinInput(''); } 
     else { setPinError(true); setPinInput(''); }
   };
 
@@ -465,17 +465,17 @@ export default function App() {
   let vYear, vSem, vExam;
 
   if (viewMode === 'status') {
-    const ratioParts = (viewingRatioKey || `${activeRatio.year}|${activeRatio.semester}`).split('|');
+    const ratioParts = String(viewingRatioKey || `${activeRatio.year}|${activeRatio.semester}`).split('|');
     vRatioYear = ratioParts[0]; vRatioSem = ratioParts[1];
     
-    const examParts = (viewingExamKey || `${activeSig.year}|${activeSig.semester}|${activeSig.examName}`).split('|');
+    const examParts = String(viewingExamKey || `${activeSig.year}|${activeSig.semester}|${activeSig.examName}`).split('|');
     vYear = examParts[0]; vSem = examParts[1]; vExam = examParts[2] || '';
   } else {
     vRatioYear = String(ratioYear); vRatioSem = String(ratioSem);
     if (viewMode === 'scope') {
       vYear = String(activeScope.year || ''); vSem = String(activeScope.semester || ''); vExam = String(activeScope.examName || '');
     } else if (viewMode === 'cutoff') {
-      vYear = String(activeCutoff.year || ''); vSem = String(activeCutoff.semester || ''); vExam = localCutoffExam || String(activeCutoff.examName || '');
+      vYear = String(activeCutoff.year || ''); vSem = String(activeCutoff.semester || ''); vExam = String(localCutoffExam || activeCutoff.examName || '');
     } else {
       vYear = String(activeSig.year || ''); vSem = String(activeSig.semester || ''); vExam = String(activeSig.examName || '');
     }
@@ -487,6 +487,7 @@ export default function App() {
   const viewingScopes = examScopes.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
   const viewingCutoffs = examCutoffs.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
 
+  // 💡 관리자 설정 및 화면을 그릴 때 존재할 수 있는 모든 null/undefined 객체를 완전히 필터링
   let scheduleToDisplay = (globalSettings.schedules?.[currentExamKey] || []).filter(Boolean);
   if (scheduleToDisplay.length === 0) {
     const legacyKey = `${globalSettings.year}|${globalSettings.semester}|${globalSettings.examName}`;
@@ -495,6 +496,7 @@ export default function App() {
   if (scheduleToDisplay.length === 0 && viewingScopes.length > 0) {
     const recoveredMap = new Map();
     viewingScopes.forEach(s => {
+      if(!s) return;
       const key = `${s.date || ''}_${s.grade || ''}_${s.period || ''}_${s.subject || ''}`;
       if (!recoveredMap.has(key)) recoveredMap.set(key, { id: s.id, date: s.date || '-', grade: s.grade, period: s.period || '-', subject: s.subject });
     });
@@ -838,13 +840,16 @@ export default function App() {
     } catch (error) { console.error(error); }
   };
 
+  // 💡 화면 렌더링 시 "객체"를 직접 텍스트로 그리는 에러가 없도록 모두 String() 처리
   const renderScheduleTable = (scheduleData, scopesData, y, s, e, isPrintView = false) => {
     if (!scheduleData || scheduleData.length === 0) return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">등록된 시험 시간표가 없습니다.</div>;
     const dateSpans = {}; const gradeSpans = {};
     scheduleData.forEach(item => { 
       if(!item) return;
-      dateSpans[item.date] = (dateSpans[item.date] || 0) + 1; 
-      const gradeKey = `${item.date}_${item.grade}`; 
+      const safeDate = String(item.date || '');
+      const safeGrade = String(item.grade || '');
+      dateSpans[safeDate] = (dateSpans[safeDate] || 0) + 1; 
+      const gradeKey = `${safeDate}_${safeGrade}`; 
       gradeSpans[gradeKey] = (gradeSpans[gradeKey] || 0) + 1; 
     });
     const renderedDates = new Set(); const renderedGrades = new Set();
@@ -865,18 +870,20 @@ export default function App() {
           <tbody>
             {scheduleData.map((item, idx) => {
               if(!item) return null;
-              const scopeId = getScopeId(y, s, e, item); const scopeDoc = (scopesData || []).find(sc => sc.id === scopeId); const gradeKey = `${item.date}_${item.grade}`;
-              const showDate = !renderedDates.has(item.date); if (showDate) renderedDates.add(item.date);
+              const safeDate = String(item.date || '');
+              const safeGrade = String(item.grade || '');
+              const scopeId = getScopeId(y, s, e, item); const scopeDoc = (scopesData || []).find(sc => sc.id === scopeId); const gradeKey = `${safeDate}_${safeGrade}`;
+              const showDate = !renderedDates.has(safeDate); if (showDate) renderedDates.add(safeDate);
               const showGrade = !renderedGrades.has(gradeKey); if (showGrade) renderedGrades.add(gradeKey);
               return (
                 <tr key={item.id || idx}>
-                  {showDate && <td rowSpan={dateSpans[item.date]} className="border border-black p-2 align-middle whitespace-pre-wrap">{item.date}</td>}
-                  {showGrade && <td rowSpan={gradeSpans[gradeKey]} className="border border-black p-2 align-middle font-bold">{item.grade}</td>}
-                  <td className="border border-black p-2">{item.period}</td>
-                  <td className="border border-black p-2 font-bold">{item.subject}</td>
+                  {showDate && <td rowSpan={dateSpans[safeDate]} className="border border-black p-2 align-middle whitespace-pre-wrap">{safeDate}</td>}
+                  {showGrade && <td rowSpan={gradeSpans[gradeKey]} className="border border-black p-2 align-middle font-bold">{safeGrade}</td>}
+                  <td className="border border-black p-2">{String(item.period || '')}</td>
+                  <td className="border border-black p-2 font-bold">{String(item.subject || '')}</td>
                   <td className="border border-black p-3 text-left whitespace-pre-wrap min-w-[200px] leading-relaxed">
-                    {scopeDoc ? scopeDoc.scopeText : (isPrintView ? '' : <span className="text-gray-300 italic">미입력</span>)}
-                    {!isPrintView && scopeDoc && <div className="text-[10px] text-gray-400 mt-2 font-medium text-right">수정: {scopeDoc.teacherName || '-'} ({getDisplayDate(scopeDoc)})</div>}
+                    {scopeDoc ? String(scopeDoc.scopeText || '') : (isPrintView ? '' : <span className="text-gray-300 italic">미입력</span>)}
+                    {!isPrintView && scopeDoc && <div className="text-[10px] text-gray-400 mt-2 font-medium text-right">수정: {String(scopeDoc.teacherName || '-')} ({getDisplayDate(scopeDoc)})</div>}
                   </td>
                   {!isPrintView && (
                     <td className="border border-black p-2 align-middle">
@@ -921,15 +928,15 @@ export default function App() {
           <tbody>
             {submittedCutoffs.map((item, idx) => (
               <tr key={idx}>
-                <td className="border border-black p-2 font-bold whitespace-nowrap">{item.subject}({item.grade})</td>
-                <td className="border border-black p-2 font-medium text-gray-800">{item.ab}</td>
-                <td className="border border-black p-2 font-medium text-gray-800">{item.bc}</td>
-                <td className="border border-black p-2 font-medium text-gray-800">{item.cd}</td>
-                <td className="border border-black p-2 font-medium text-gray-800">{item.de}</td>
-                <td className="border border-black p-2 font-medium text-gray-800">{item.ei}</td>
+                <td className="border border-black p-2 font-bold whitespace-nowrap">{String(item.subject || '')}({String(item.grade || '')})</td>
+                <td className="border border-black p-2 font-medium text-gray-800">{String(item.ab || '')}</td>
+                <td className="border border-black p-2 font-medium text-gray-800">{String(item.bc || '')}</td>
+                <td className="border border-black p-2 font-medium text-gray-800">{String(item.cd || '')}</td>
+                <td className="border border-black p-2 font-medium text-gray-800">{String(item.de || '')}</td>
+                <td className="border border-black p-2 font-medium text-gray-800">{String(item.ei || '')}</td>
                 {!isPrintView && (
                   <td className="border border-black p-2 text-[10px] text-gray-500 leading-tight print:hidden">
-                    {item.teacherName || '-'}<br/>({getDisplayDate(item)})
+                    {String(item.teacherName || '-')}<br/>({getDisplayDate(item)})
                   </td>
                 )}
               </tr>
@@ -991,18 +998,18 @@ export default function App() {
                   <tbody>
                     {gradeRatios.map((item, i) => (
                       <tr key={item.id || `${item.subject}_${i}`}>
-                        <td className="border border-black p-1 font-bold text-left pl-2">{item.subject}</td>
-                        <td className="border border-black p-1">{item.exam1}</td>
-                        <td className="border border-black p-1">{item.exam2}</td>
-                        <td className="border border-black p-1">{item.perf1}</td>
-                        <td className="border border-black p-1">{item.perf2}</td>
-                        <td className="border border-black p-1">{item.perf3}</td>
-                        <td className="border border-black p-1">{item.perf4}</td>
-                        <td className="border border-black p-1">{item.perf5}</td>
-                        <td className="border border-black p-1 font-bold">{item.essay}</td>
-                        <td className="border border-black p-1">{item.total}</td>
+                        <td className="border border-black p-1 font-bold text-left pl-2">{String(item.subject || '')}</td>
+                        <td className="border border-black p-1">{String(item.exam1 || '')}</td>
+                        <td className="border border-black p-1">{String(item.exam2 || '')}</td>
+                        <td className="border border-black p-1">{String(item.perf1 || '')}</td>
+                        <td className="border border-black p-1">{String(item.perf2 || '')}</td>
+                        <td className="border border-black p-1">{String(item.perf3 || '')}</td>
+                        <td className="border border-black p-1">{String(item.perf4 || '')}</td>
+                        <td className="border border-black p-1">{String(item.perf5 || '')}</td>
+                        <td className="border border-black p-1 font-bold">{String(item.essay || '')}</td>
+                        <td className="border border-black p-1">{String(item.total || '')}</td>
                         <td className="border border-black p-1">
-                          {item.isConfirmed ? <span className="text-[10px] font-black text-emerald-700">{item.confirmedBy} (완료)</span> : <span className="text-[10px] text-gray-400">미확인</span>}
+                          {item.isConfirmed ? <span className="text-[10px] font-black text-emerald-700">{String(item.confirmedBy || '')} (완료)</span> : <span className="text-[10px] text-gray-400">미확인</span>}
                         </td>
                       </tr>
                     ))}
@@ -1027,25 +1034,25 @@ export default function App() {
           <div className="print-document-modal fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 md:p-8 print:static print:block print:bg-white print:p-0 animate-fade-in overflow-y-auto" onClick={() => setSelectedSubmission(null)}>
             <div className="print-document-sheet bg-white p-10 md:p-14 rounded-none md:rounded-[2rem] max-w-4xl w-full shadow-2xl print:shadow-none print:max-w-none print:w-full print:p-0 my-auto" onClick={e => e.stopPropagation()}>
               <div className="print-document-content print:text-black">
-                <h2 className="text-3xl font-black text-center mb-1 tracking-[0.2em]">{baseSub.year === 'undefined' ? '?' : baseSub.year}년 {baseSub.semester === 'undefined' ? '?' : baseSub.semester}학기 {baseSub.examName === 'undefined' ? '' : baseSub.examName}</h2>
+                <h2 className="text-3xl font-black text-center mb-1 tracking-[0.2em]">{String(baseSub.year === 'undefined' ? '?' : baseSub.year)}년 {String(baseSub.semester === 'undefined' ? '?' : baseSub.semester)}학기 {String(baseSub.examName === 'undefined' ? '' : baseSub.examName)}</h2>
                 <h2 className="text-3xl font-black text-center mb-8 tracking-[0.2em]">출제 검토 확인서</h2>
-                <p className="text-lg font-bold leading-relaxed mb-4 text-justify">본인은 {baseSub.subject}과 시험문제를 출제함에 있어 아래 표와 같은 내용을 검토하였음을 확인합니다.</p>
+                <p className="text-lg font-bold leading-relaxed mb-4 text-justify">본인은 {String(baseSub.subject)}과 시험문제를 출제함에 있어 아래 표와 같은 내용을 검토하였음을 확인합니다.</p>
                 <table className="w-full border-collapse border-2 border-black mb-10 text-[15px] print:text-[14px]">
                   <thead><tr><th className="border-2 border-black p-3 bg-gray-100 font-black text-center" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>검토 사항</th><th className="border-2 border-black p-3 bg-gray-100 font-black text-center w-28 whitespace-nowrap" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>확인여부<br/>(O, X)</th></tr></thead>
                   <tbody>
                     {(baseSub.checklistSnapshot || defaultChecklistData).map(item => (
                       <tr key={item.id}>
-                        {item.type === 'category' ? ( <><td className="border border-black px-4 py-3 font-bold bg-gray-50 print:bg-gray-50" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>{item.text}</td><td className="border border-black px-4 py-3 bg-gray-50 print:bg-gray-50" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}></td></>) : ( <><td className={`border border-black px-4 py-2 leading-snug ${item.type === 'item2' ? 'pl-8' : 'pl-4'}`}>{item.text}</td><td className="border border-black p-2 text-center font-black text-xl">{item.status}</td></>)}
+                        {item.type === 'category' ? ( <><td className="border border-black px-4 py-3 font-bold bg-gray-50 print:bg-gray-50" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>{String(item.text)}</td><td className="border border-black px-4 py-3 bg-gray-50 print:bg-gray-50" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}></td></>) : ( <><td className={`border border-black px-4 py-2 leading-snug ${item.type === 'item2' ? 'pl-8' : 'pl-4'}`}>{String(item.text)}</td><td className="border border-black p-2 text-center font-black text-xl">{String(item.status)}</td></>)}
                       </tr>
                     ))}
                   </tbody>
                 </table>
                 <div className="print-signature-area text-center mt-12 print:mt-16">
-                  <p className="text-lg font-bold mb-6">위 항목을 모두 확인하고 이상 없음을 확인합니다.</p><p className="text-xl font-bold tracking-widest mb-10">{activeSig.documentDate}</p>
+                  <p className="text-lg font-bold mb-6">위 항목을 모두 확인하고 이상 없음을 확인합니다.</p><p className="text-xl font-bold tracking-widest mb-10">{String(activeSig.documentDate)}</p>
                   <div className={`print-signature-list signature-count-${Math.min(selectedSubmission.length, 6)} flex flex-col items-end text-xl font-bold pr-4 gap-y-6 mt-4`}>
                     {selectedSubmission.map((sub, idx) => (
                       <div key={idx} className="print-signature-row flex items-center">
-                        <span className={`mr-8 ${idx === 0 ? '' : 'invisible'}`}>확인 직위: 교사</span><span className="mr-2 w-32 text-right">성명: {sub.teacherName}</span>
+                        <span className={`mr-8 ${idx === 0 ? '' : 'invisible'}`}>확인 직위: 교사</span><span className="mr-2 w-32 text-right">성명: {String(sub.teacherName)}</span>
                         <div className="relative inline-flex items-center justify-center w-28 h-12 ml-2"><span className="z-0 text-gray-400 font-normal">(서명/인)</span><img src={sub.signatureData} alt="서명" className="absolute z-10 h-16 w-[140%] max-w-none object-contain mix-blend-multiply drop-shadow-sm pointer-events-none" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }} /></div>
                       </div>
                     ))}
@@ -1069,8 +1076,8 @@ export default function App() {
               <button onClick={() => setSelectedScheduleItem(null)} className="text-gray-400 hover:text-red-500"><X size={24}/></button>
             </div>
             <div className="mb-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
-              <p className="text-sm font-bold text-blue-900">{selectedScheduleItem.date} {selectedScheduleItem.grade}학년 {selectedScheduleItem.period}교시</p>
-              <p className="text-lg font-black text-blue-700">{selectedScheduleItem.subject}</p>
+              <p className="text-sm font-bold text-blue-900">{String(selectedScheduleItem.date)} {String(selectedScheduleItem.grade)}학년 {String(selectedScheduleItem.period)}교시</p>
+              <p className="text-lg font-black text-blue-700">{String(selectedScheduleItem.subject)}</p>
             </div>
             <form onSubmit={handleScopeSubmit} className="space-y-4">
               <div>
@@ -1159,25 +1166,25 @@ export default function App() {
           {viewMode === 'ratio' && (
             <div className="w-full max-w-[1200px] bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-6 md:p-10 animate-fade-in mt-4">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-gray-100 pb-6">
-                <div className="flex flex-col gap-2">
-                  <h2 className="text-2xl font-black text-gray-800 flex items-center gap-2"><ClipboardList className="text-amber-600"/> 과목별 정기시험 및 수행평가 비율</h2>
-                  <p className="text-gray-500 text-sm font-medium">비율을 입력하면 <strong>논술형(괄호 안 합)</strong>과 <strong>계(괄호 밖 합)</strong>가 자동 계산되며, 빈칸 클릭 시 바로 수정할 수 있습니다.</p>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 p-1 rounded-xl px-3">
-                    <History size={16} className="text-gray-400"/>
-                    <input type="text" value={ratioYear} onChange={e=>setRatioYear(e.target.value)} className="w-16 bg-transparent text-sm font-bold text-center outline-none" />년
-                    <select value={ratioSem} onChange={e=>setRatioSem(e.target.value)} className="bg-transparent text-sm font-bold outline-none ml-2">
-                      <option value="1">1학기</option>
-                      <option value="2">2학기</option>
-                    </select>
-                  </div>
-                </div>
+            <div className="flex flex-col gap-2">
+              <h2 className="text-2xl font-black text-gray-800 flex items-center gap-2"><ClipboardList className="text-amber-600"/> 과목별 정기시험 및 수행평가 비율</h2>
+              <p className="text-gray-500 text-sm font-medium">비율을 입력하면 <strong>논술형(괄호 안 합)</strong>과 <strong>계(괄호 밖 합)</strong>가 자동 계산되며, 빈칸 클릭 시 바로 수정할 수 있습니다.</p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 p-1 rounded-xl px-3">
+                <History size={16} className="text-gray-400"/>
+                <input type="text" value={ratioYear} onChange={e=>setRatioYear(e.target.value)} className="w-16 bg-transparent text-sm font-bold text-center outline-none" />년
+                <select value={ratioSem} onChange={e=>setRatioSem(e.target.value)} className="bg-transparent text-sm font-bold outline-none ml-2">
+                  <option value="1">1학기</option>
+                  <option value="2">2학기</option>
+                </select>
               </div>
+            </div>
+          </div>
 
-              <div className="w-full">
-                {[1, 2, 3].map(g => {
-                  const gradeRatios = displayRatios.filter(r => String(r.grade) === String(g));
+          <div className="w-full">
+            {[1, 2, 3].map(g => {
+              const gradeRatios = displayRatios.filter(r => String(r.grade) === String(g));
                   const newRows = newRatioRows.filter(r => String(r.grade) === String(g) && String(r.year) === String(ratioYear) && String(r.semester) === String(ratioSem));
                   
                   if (gradeRatios.length === 0 && newRows.length === 0) {
@@ -1263,7 +1270,7 @@ export default function App() {
                       <ul className="space-y-3 text-sm text-gray-600">
                         {(globalSettings.checklist || defaultChecklistData).map(item => (
                           <li key={item.id} className={`flex justify-between items-start ${item.type === 'category' ? 'font-black text-gray-800 mt-5 border-b border-gray-200 pb-1 text-base' : 'pl-2 mt-2'}`}>
-                            <span className={item.type === 'category' ? '' : 'relative before:content-["-"] before:absolute before:-left-2 before:text-gray-400 pl-2 pr-4 flex-1 leading-tight'}>{item.text}</span>
+                            <span className={item.type === 'category' ? '' : 'relative before:content-["-"] before:absolute before:-left-2 before:text-gray-400 pl-2 pr-4 flex-1 leading-tight'}>{String(item.text)}</span>
                             {item.type !== 'category' && (
                               <span className="flex gap-1.5 shrink-0 mt-0.5">
                                 <span className={`w-5 h-5 flex items-center justify-center rounded border ${(item.status !== 'X') ? 'border-blue-500 bg-blue-50 text-blue-600 font-black' : 'border-gray-200 text-gray-300 font-bold'} text-[10px]`}>O</span>
@@ -1281,7 +1288,7 @@ export default function App() {
                       <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1">Subject</label>
                       <select value={selectedSubject} onChange={e=>{ setSelectedSubject(e.target.value); setSelectedTeacher(''); setSignatureData(null); setDeleteStep(0); setSubmitError(''); }} className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-base font-bold focus:border-blue-500 focus:bg-white transition-all appearance-none outline-none shadow-sm" required>
                         <option value="">과목 선택</option>
-                        {Array.isArray(globalSettings.subjects) && globalSettings.subjects.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                        {Array.isArray(globalSettings.subjects) && globalSettings.subjects.map(s => <option key={s.name} value={s.name}>{String(s.name)}</option>)}
                       </select>
                       <div className="absolute right-4 bottom-4 pointer-events-none opacity-30"><Search size={18}/></div>
                     </div>
@@ -1291,7 +1298,7 @@ export default function App() {
                         <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1">Teacher</label>
                         <select value={selectedTeacher} onChange={e => { setSelectedTeacher(e.target.value); setSignatureData(null); setDeleteStep(0); setSubmitError(''); }} className="w-full p-4 bg-blue-50/50 border-2 border-blue-100 rounded-2xl text-base font-bold text-blue-800 focus:border-blue-500 focus:bg-white transition-all appearance-none outline-none shadow-sm" required>
                           <option value="">성함 선택</option>
-                          {safeTeachers.map(t=><option key={t} value={t}>{t}</option>)}
+                          {safeTeachers.map(t=><option key={t} value={t}>{String(t)}</option>)}
                         </select>
                         <div className="absolute right-4 bottom-4 pointer-events-none opacity-30"><Users size={18}/></div>
                       </div>
@@ -1330,7 +1337,7 @@ export default function App() {
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 px-2">
                 <div>
                   <button type="button" onClick={() => setViewMode('home')} className="mb-3 text-xs font-black text-gray-500 hover:text-indigo-600 bg-white hover:bg-indigo-50 border border-gray-200 hover:border-indigo-200 px-3 py-2 rounded-xl transition-all shadow-sm">← 첫 화면으로</button>
-                  <h2 className="text-2xl font-black text-gray-800 flex items-center gap-2"><CalendarDays className="text-indigo-600"/> {activeScope.year}년 {activeScope.semester}학기 {activeScope.examName} 범위 입력</h2>
+                  <h2 className="text-2xl font-black text-gray-800 flex items-center gap-2"><CalendarDays className="text-indigo-600"/> {String(activeScope.year)}년 {String(activeScope.semester)}학기 {String(activeScope.examName)} 범위 입력</h2>
                   <p className="text-gray-500 text-sm font-medium mt-1">담당 과목의 [입력/수정] 버튼을 눌러주세요.</p>
                 </div>
               </div>
@@ -1345,7 +1352,7 @@ export default function App() {
                 <button type="button" onClick={() => setViewMode('home')} className="text-xs font-black text-gray-500 hover:text-rose-600 bg-gray-50 hover:bg-rose-50 border border-gray-200 hover:border-rose-200 px-3 py-2 rounded-xl transition-all">← 첫 화면으로</button>
               </div>
               <div className="bg-gradient-to-br from-rose-600 to-rose-800 text-white p-8 text-center relative overflow-hidden mt-4">
-                <h2 className="text-2xl font-black mb-1 relative z-10 flex justify-center items-center gap-2 tracking-wide"><Target size={24}/> {activeCutoff.year}년 {activeCutoff.semester}학기 추정분할 점수 입력</h2>
+                <h2 className="text-2xl font-black mb-1 relative z-10 flex justify-center items-center gap-2 tracking-wide"><Target size={24}/> {String(activeCutoff.year)}년 {String(activeCutoff.semester)}학기 추정분할 점수 입력</h2>
                 <p className="text-rose-100 text-sm font-medium opacity-90 relative z-10 mt-1">추정분할 하는 과목만 입력해 주세요.</p>
               </div>
               <form onSubmit={handleCutoffSubmit} className="p-8 space-y-5">
@@ -1360,7 +1367,7 @@ export default function App() {
                   <select value={cutoffSubjectGrade} onChange={e=>setCutoffSubjectGrade(e.target.value)} className="w-full p-4 bg-rose-50/50 border-2 border-rose-100 rounded-2xl text-base font-bold text-rose-900 focus:border-rose-500 focus:bg-white transition-all appearance-none outline-none shadow-sm" required>
                     <option value="">과목명 (학년)을 선택하세요</option>
                     {cutoffSubjectOptions.map((item, idx) => (
-                      <option key={idx} value={`${item.grade}|${item.subject}`}>{item.subject} ({item.grade}학년)</option>
+                      <option key={idx} value={`${item.grade}|${item.subject}`}>{String(item.subject)} ({String(item.grade)}학년)</option>
                     ))}
                   </select>
                   {cutoffSubjectOptions.length === 0 && <p className="text-xs text-red-500 mt-2 font-bold px-2">해당 고사에 등록된 과목이나 시간표가 없습니다. 관리자 메뉴에서 세팅해주세요.</p>}
@@ -1431,9 +1438,9 @@ export default function App() {
               {statusTab === 'ratio' && (
                 <div className="animate-fade-in print:block">
                   <div className="mb-6 text-center text-lg font-black text-amber-800 bg-amber-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
-                    [시험 및 수행 비율 현황] {vRatioYear}학년도 {vRatioSem}학기
+                    [시험 및 수행 비율 현황] {String(vRatioYear)}학년도 {String(vRatioSem)}학기
                   </div>
-                  <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-2xl font-black tracking-widest">{vRatioYear}학년도 {vRatioSem}학기 과목별 정기시험 및 수행평가 비율</h2></div>
+                  <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-2xl font-black tracking-widest">{String(vRatioYear)}학년도 {String(vRatioSem)}학기 과목별 정기시험 및 수행평가 비율</h2></div>
                   {renderReadOnlyRatioTable()}
                 </div>
               )}
@@ -1456,7 +1463,7 @@ export default function App() {
                         <div key={subject.name} className={`relative p-6 rounded-3xl border-2 transition-all shadow-sm print:break-inside-avoid ${isComplete ? 'bg-emerald-50/50 border-emerald-100 print:border-gray-300 print:bg-white' : 'bg-white border-gray-200 print:border-gray-300'}`}>
                           <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-2 print:border-gray-200">
                             <div className="flex items-center gap-2">
-                              <h3 className="text-lg font-black text-gray-800">{subject.name}</h3>
+                              <h3 className="text-lg font-black text-gray-800">{String(subject.name)}</h3>
                               {subjectSignatures.length > 0 && (
                                 <button onClick={() => { const sortedSigs = [...subjectSignatures].sort((a, b) => a.teacherName.localeCompare(b.teacherName, 'ko-KR')); setSelectedSubmission(sortedSigs); }} className="print:hidden text-[11px] bg-blue-100 text-blue-700 px-2 py-1 rounded-md font-bold hover:bg-blue-200 flex items-center gap-1 transition-colors">
                                   <Printer size={12}/> 통합인쇄
@@ -1473,7 +1480,7 @@ export default function App() {
                                 const sigRecord = subjectSignatures.find(s => s.teacherName === teacher); const hasSubmitted = !!sigRecord;
                                 return (
                                   <div key={teacher} className={`flex items-center justify-between p-2.5 rounded-xl border print:border-none print:p-1 print:border-b ${hasSubmitted ? 'bg-white border-emerald-200 print:bg-white' : 'bg-gray-50 border-gray-200'}`}>
-                                    <span className={`text-sm font-bold ${hasSubmitted ? 'text-gray-800' : 'text-gray-400'}`}>{teacher} 교사</span>
+                                    <span className={`text-sm font-bold ${hasSubmitted ? 'text-gray-800' : 'text-gray-400'}`}>{String(teacher)} 교사</span>
                                     {hasSubmitted ? (
                                       <button onClick={() => setSelectedSubmission([sigRecord])} className="flex items-center gap-1 text-[11px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100 hover:bg-emerald-100 transition-colors print:border-none print:bg-transparent print:text-gray-800"><FileText size={12} className="print:hidden"/> 개별 확인</button>
                                     ) : ( <span className="text-xs font-bold text-red-400 print:text-gray-500">미제출</span> )}
@@ -1506,7 +1513,7 @@ export default function App() {
                   <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
                     [시험 범위표] {formatExamOption(viewingExamKey)}
                   </div>
-                  <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-3xl font-black tracking-widest">{vYear}학년도 {vSem}학기 {vExam} 시험 범위</h2></div>
+                  <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-3xl font-black tracking-widest">{String(vYear)}학년도 {String(vSem)}학기 {String(vExam)} 시험 범위</h2></div>
                   {renderScheduleTable(scheduleToDisplay, viewingScopes, vYear, vSem, vExam, true)}
                 </div>
               )}
@@ -1516,7 +1523,7 @@ export default function App() {
                   <div className="mb-6 print:mb-8 text-center text-lg font-black text-gray-800 bg-gray-50 py-3 rounded-xl print:bg-transparent print:p-0 border-b-2 print:border-black print:pb-4 print:hidden">
                     [추정분할 점수 현황] {formatExamOption(viewingExamKey)}
                   </div>
-                  <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-3xl font-black tracking-widest">{vYear}학년도 {vSem}학기 {vExam} 추정분할 점수</h2></div>
+                  <div className="text-center mb-6 print:mb-8 hidden print:block"><h2 className="text-3xl font-black tracking-widest">{String(vYear)}학년도 {String(vSem)}학기 {String(vExam)} 추정분할 점수</h2></div>
                   {renderCutoffTable(cutoffSubjectOptions, viewingCutoffs, vYear, vSem, vExam, true)}
                 </div>
               )}
@@ -1546,7 +1553,7 @@ export default function App() {
                 <button onClick={() => setIsAdminUnlocked(false)} className="text-xs text-gray-400 flex items-center gap-1 font-bold hover:text-gray-600"><Lock size={12}/> 잠그기</button>
               </div>
 
-              {adminMessage.text && ( <div className={`p-4 rounded-2xl mb-6 text-sm font-bold flex items-center gap-2 ${adminMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{adminMessage.type === 'success' ? <CheckCircle size={18}/> : <AlertCircle size={18}/>}{adminMessage.text}</div> )}
+              {adminMessage.text && ( <div className={`p-4 rounded-2xl mb-6 text-sm font-bold flex items-center gap-2 ${adminMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{adminMessage.type === 'success' ? <CheckCircle size={18}/> : <AlertCircle size={18}/>}{String(adminMessage.text)}</div> )}
 
               <div className="space-y-10">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1587,7 +1594,7 @@ export default function App() {
                 <div className="pt-4 border-t border-gray-100">
                   <h3 className="text-lg font-black text-gray-800 mb-2 flex items-center gap-2">
                     <ClipboardList size={20} className="text-purple-500"/> 
-                    [{adminData.activeSettings?.cutoff?.year}년 {adminData.activeSettings?.cutoff?.semester}학기] 수행평가 과목 관리
+                    [{String(adminData.activeSettings?.cutoff?.year || '')}년 {String(adminData.activeSettings?.cutoff?.semester || '')}학기] 수행평가 과목 관리
                   </h3>
                   <p className="text-xs text-purple-700 mb-4 font-bold bg-purple-50 inline-block px-3 py-1.5 rounded-lg border border-purple-100">
                     💡 추정분할 탭에서 '수행평가'를 입력할 때 사용되는 과목 명단입니다.
@@ -1603,10 +1610,10 @@ export default function App() {
                     <button onClick={handlePerfBulkPaste} type="button" className="mt-3 px-4 py-2 bg-rose-600 text-white text-xs font-bold rounded-lg hover:bg-rose-700 transition-all shadow-sm active:scale-95">수행평가 과목 일괄 추가</button>
                   </div>
                   <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">
-                    {(!globalSettings.perfSchedules?.[`${adminData.activeSettings?.cutoff?.year}|${adminData.activeSettings?.cutoff?.semester}`] || globalSettings.perfSchedules?.[`${adminData.activeSettings?.cutoff?.year}|${adminData.activeSettings?.cutoff?.semester}`].length === 0) && <p className="text-center text-sm text-gray-400 py-4">이 학기에 등록된 수행평가 과목이 없습니다.</p>}
-                    {(globalSettings.perfSchedules?.[`${adminData.activeSettings?.cutoff?.year}|${adminData.activeSettings?.cutoff?.semester}`] || []).map(item => (
+                    {(!adminData.perfSchedules?.[`${adminData.activeSettings?.cutoff?.year}|${adminData.activeSettings?.cutoff?.semester}`] || adminData.perfSchedules?.[`${adminData.activeSettings?.cutoff?.year}|${adminData.activeSettings?.cutoff?.semester}`].length === 0) && <p className="text-center text-sm text-gray-400 py-4">이 학기에 등록된 수행평가 과목이 없습니다.</p>}
+                    {(adminData.perfSchedules?.[`${adminData.activeSettings?.cutoff?.year}|${adminData.activeSettings?.cutoff?.semester}`] || []).filter(Boolean).map(item => (
                       <div key={item.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-200 shadow-sm hover:border-rose-200 text-sm">
-                        <span className="font-medium text-gray-800"><strong className="w-16 inline-block text-center">{item.grade}학년</strong> | <strong className="ml-2 text-rose-700">{item.subject}</strong></span>
+                        <span className="font-medium text-gray-800"><strong className="w-16 inline-block text-center">{String(item.grade)}학년</strong> | <strong className="ml-2 text-rose-700">{String(item.subject)}</strong></span>
                         <button onClick={() => removePerfItem(item.id)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
                       </div>
                     ))}
@@ -1616,7 +1623,7 @@ export default function App() {
                 <div className="pt-4 border-t border-gray-100">
                   <h3 className="text-lg font-black text-gray-800 mb-2 flex items-center gap-2">
                     <CalendarDays size={20} className="text-purple-500"/> 
-                    [{adminData.activeSettings?.scope?.year}년 {adminData.activeSettings?.scope?.semester}학기 {adminData.activeSettings?.scope?.examName}] 시간표 관리
+                    [{String(adminData.activeSettings?.scope?.year || '')}년 {String(adminData.activeSettings?.scope?.semester || '')}학기 {String(adminData.activeSettings?.scope?.examName || '')}] 시간표 관리
                   </h3>
                   <p className="text-xs text-purple-700 mb-4 font-bold bg-purple-50 inline-block px-3 py-1.5 rounded-lg border border-purple-100">
                     💡 위쪽의 [시험 범위 입력] 세팅을 변경하시면, 해당 고사에 매칭되는 시간표로 즉시 전환됩니다.
@@ -1634,10 +1641,10 @@ export default function App() {
                     <button onClick={handleScheduleBulkPaste} type="button" className="mt-3 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-all shadow-sm active:scale-95">시간표 일괄 추가</button>
                   </div>
                   <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">
-                    {(!globalSettings.schedules?.[`${adminData.activeSettings?.scope?.year}|${adminData.activeSettings?.scope?.semester}|${adminData.activeSettings?.scope?.examName}`] || globalSettings.schedules?.[`${adminData.activeSettings?.scope?.year}|${adminData.activeSettings?.scope?.semester}|${adminData.activeSettings?.scope?.examName}`].length === 0) && <p className="text-center text-sm text-gray-400 py-4">이 시험에 등록된 시간표가 없습니다.</p>}
-                    {(globalSettings.schedules?.[`${adminData.activeSettings?.scope?.year}|${adminData.activeSettings?.scope?.semester}|${adminData.activeSettings?.scope?.examName}`] || []).map(item => (
+                    {(!adminData.schedules?.[`${adminData.activeSettings?.scope?.year}|${adminData.activeSettings?.scope?.semester}|${adminData.activeSettings?.scope?.examName}`] || adminData.schedules?.[`${adminData.activeSettings?.scope?.year}|${adminData.activeSettings?.scope?.semester}|${adminData.activeSettings?.scope?.examName}`].length === 0) && <p className="text-center text-sm text-gray-400 py-4">이 시험에 등록된 시간표가 없습니다.</p>}
+                    {(adminData.schedules?.[`${adminData.activeSettings?.scope?.year}|${adminData.activeSettings?.scope?.semester}|${adminData.activeSettings?.scope?.examName}`] || []).filter(Boolean).map(item => (
                       <div key={item.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-200 shadow-sm hover:border-indigo-200 text-sm">
-                        <span className="font-medium text-gray-800"><strong className="w-28 inline-block">{item.date}</strong> | <strong className="w-12 inline-block text-center">{item.grade}학년</strong> | <span className="w-12 inline-block text-center">{item.period}교시</span> | <strong className="ml-2 text-indigo-700">{item.subject}</strong></span>
+                        <span className="font-medium text-gray-800"><strong className="w-28 inline-block">{String(item.date)}</strong> | <strong className="w-12 inline-block text-center">{String(item.grade)}학년</strong> | <span className="w-12 inline-block text-center">{String(item.period)}교시</span> | <strong className="ml-2 text-indigo-700">{String(item.subject)}</strong></span>
                         <button onClick={() => removeScheduleItem(item.id)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
                       </div>
                     ))}
@@ -1656,12 +1663,12 @@ export default function App() {
                     <button onClick={addSubject} className="bg-gray-800 text-white px-5 rounded-xl font-bold hover:bg-black active:scale-95 whitespace-nowrap">과목 추가</button>
                   </div>
                   <div className="space-y-4 max-h-96 overflow-y-auto custom-scrollbar pr-2">
-                    {(adminData.subjects || []).map(subject => (
+                    {(adminData.subjects || []).filter(Boolean).map(subject => (
                       <div key={subject.name} className="bg-gray-50 border-2 border-gray-100 rounded-2xl p-4">
-                        <div className="flex justify-between items-center border-b border-gray-200 pb-3 mb-3"><span className="font-black text-lg text-purple-900">{subject.name}</span><button onClick={() => removeSubject(subject.name)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={16}/></button></div>
+                        <div className="flex justify-between items-center border-b border-gray-200 pb-3 mb-3"><span className="font-black text-lg text-purple-900">{String(subject.name)}</span><button onClick={() => removeSubject(subject.name)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={16}/></button></div>
                         <div className="flex flex-wrap gap-2 mb-4">
-                          {(subject.teachers || []).map(teacher => (
-                            <span key={teacher} className="bg-white border border-gray-200 px-3 py-1.5 rounded-lg text-sm font-bold text-gray-700 flex items-center gap-2 shadow-sm">{teacher}<button onClick={()=>removeTeacherFromSubject(subject.name, teacher)} className="text-gray-400 hover:text-red-500"><X size={14}/></button></span>
+                          {(subject.teachers || []).filter(Boolean).map(teacher => (
+                            <span key={teacher} className="bg-white border border-gray-200 px-3 py-1.5 rounded-lg text-sm font-bold text-gray-700 flex items-center gap-2 shadow-sm">{String(teacher)}<button onClick={()=>removeTeacherFromSubject(subject.name, teacher)} className="text-gray-400 hover:text-red-500"><X size={14}/></button></span>
                           ))}
                         </div>
                         <div className="flex gap-2">
@@ -1677,9 +1684,9 @@ export default function App() {
                   <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2"><List size={20} className="text-purple-500"/> 출제 검토 항목(체크리스트) 관리</h3>
                   <div className="bg-gray-50 border-2 border-gray-100 rounded-2xl p-4">
                     <div className="space-y-2 mb-4 max-h-80 overflow-y-auto custom-scrollbar pr-2">
-                      {(adminData.checklist || defaultChecklistData).map(item => (
+                      {(adminData.checklist || defaultChecklistData).filter(Boolean).map(item => (
                         <div key={item.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-200 shadow-sm hover:border-purple-200">
-                          <span className={item.type === 'category' ? 'font-black text-gray-800' : 'text-sm text-gray-600 pl-2 flex-1'}>{item.text}</span>
+                          <span className={item.type === 'category' ? 'font-black text-gray-800' : 'text-sm text-gray-600 pl-2 flex-1'}>{String(item.text)}</span>
                           <div className="flex items-center gap-3">
                             {item.type !== 'category' && ( <div className="flex gap-1 bg-gray-100 p-1 rounded-lg"><button onClick={() => updateChecklistStatus(item.id, 'O')} className={`px-3 py-1 text-xs font-black rounded-md ${item.status !== 'X' ? 'bg-blue-500 text-white shadow-sm' : 'text-gray-400'}`}>O</button><button onClick={() => updateChecklistStatus(item.id, 'X')} className={`px-3 py-1 text-xs font-black rounded-md ${item.status === 'X' ? 'bg-red-500 text-white shadow-sm' : 'text-gray-400'}`}>X</button></div> )}
                             <button onClick={() => removeChecklistItem(item.id)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
@@ -1700,7 +1707,7 @@ export default function App() {
                   <div className="bg-red-50/50 border-2 border-red-100 rounded-2xl p-4">
                     {examOptions.length === 0 ? ( <p className="text-sm text-gray-500 text-center py-2">기록된 시험이 없습니다.</p> ) : (
                       <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-2">
-                        {examOptions.map(opt => (
+                        {examOptions.filter(Boolean).map(opt => (
                           <div key={opt} className="flex justify-between items-center bg-white p-3 rounded-xl border border-red-100 shadow-sm">
                             <span className="font-bold text-gray-800 text-sm">{formatExamOption(opt)}</span>
                             {deleteExamKey === opt ? (
