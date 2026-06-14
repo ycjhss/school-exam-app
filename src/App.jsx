@@ -156,7 +156,6 @@ const formatExamOption = (opt) => {
   return `${y}년 ${s}학기 ${e === 'undefined' || !e ? '' : e}`;
 };
 
-// 💡 안전한 고유 ID 생성 (기존 데이터 완벽 복원 및 undefined 방지)
 const getScopeId = (vYear, vSem, vExam, item) => {
   if (!item) return '';
   return `${vYear}_${vSem}_${vExam}_${item.date || ''}_${item.grade || ''}_${item.period || ''}_${item.subject || ''}`.replace(/\s/g, '');
@@ -443,9 +442,10 @@ export default function App() {
     return () => { unsubSigs(); unsubPrints(); unsubScopes(); unsubCutoffs(); unsubRatios(); };
   }, [user]);
 
+  // 💡 데이터베이스에 저장된 암호가 숫자형일 수 있으므로 무조건 문자열로 씌워서 비교하도록 보강
   const handleUnlockAdmin = (e) => {
     e.preventDefault();
-    const currentPassword = globalSettings.adminPassword || '1234';
+    const currentPassword = String(globalSettings.adminPassword || '1234');
     if (pinInput === currentPassword) { setIsAdminUnlocked(true); setPinError(false); setPinInput(''); } 
     else { setPinError(true); setPinInput(''); }
   };
@@ -461,7 +461,6 @@ export default function App() {
     }
   }, [activeCutoff, localCutoffExam]);
 
-  // 💡 입력/상태 변수 분리
   let vRatioYear, vRatioSem;
   let vYear, vSem, vExam;
 
@@ -839,10 +838,10 @@ export default function App() {
     } catch (error) { console.error(error); }
   };
 
-  const renderScheduleTable = (isPrintView = false) => {
-    if (scheduleToDisplay.length === 0) return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">등록된 시험 시간표가 없습니다.</div>;
+  const renderScheduleTable = (scheduleData, scopesData, y, s, e, isPrintView = false) => {
+    if (!scheduleData || scheduleData.length === 0) return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">등록된 시험 시간표가 없습니다.</div>;
     const dateSpans = {}; const gradeSpans = {};
-    scheduleToDisplay.forEach(item => { 
+    scheduleData.forEach(item => { 
       if(!item) return;
       dateSpans[item.date] = (dateSpans[item.date] || 0) + 1; 
       const gradeKey = `${item.date}_${item.grade}`; 
@@ -864,9 +863,9 @@ export default function App() {
             </tr>
           </thead>
           <tbody>
-            {scheduleToDisplay.map((item, idx) => {
+            {scheduleData.map((item, idx) => {
               if(!item) return null;
-              const scopeId = getScopeId(vYear, vSem, vExam, item); const scopeDoc = viewingScopes.find(s => s.id === scopeId); const gradeKey = `${item.date}_${item.grade}`;
+              const scopeId = getScopeId(y, s, e, item); const scopeDoc = (scopesData || []).find(sc => sc.id === scopeId); const gradeKey = `${item.date}_${item.grade}`;
               const showDate = !renderedDates.has(item.date); if (showDate) renderedDates.add(item.date);
               const showGrade = !renderedGrades.has(gradeKey); if (showGrade) renderedGrades.add(gradeKey);
               return (
@@ -895,11 +894,11 @@ export default function App() {
     );
   };
 
-  const renderCutoffTable = (isPrintView = false) => {
-    const submittedCutoffs = cutoffSubjectOptions.map(item => {
+  const renderCutoffTable = (uniqueSubjectsData, cutoffsData, y, s, e, isPrintView = false) => {
+    const submittedCutoffs = (uniqueSubjectsData || []).map(item => {
       if (!item) return null;
-      const docId = `${vYear}_${vSem}_${vExam}_${item.grade}_${item.subject}`.replace(/\s/g, '');
-      const doc = viewingCutoffs.find(c => c.id === docId);
+      const docId = `${y}_${s}_${e}_${item?.grade || ''}_${item?.subject || ''}`.replace(/\s/g, '');
+      const doc = (cutoffsData || []).find(c => c.id === docId);
       return doc ? { ...item, ...doc } : null;
     }).filter(Boolean);
 
@@ -942,17 +941,18 @@ export default function App() {
   };
 
   const renderReadOnlyRatioTable = () => {
+    const currentStatusRatios = (assessmentRatios || []).filter(r => String(r?.year) === String(vRatioYear) && String(r?.semester) === String(vRatioSem));
     let displayStatusRatios = [];
 
     if (String(vRatioYear) === '2026' && String(vRatioSem) === '1') {
       displayStatusRatios = defaultAssessment2026S1.map(def => {
-        const found = inputRatiosData.find(r => r.subject === def.subject && String(r.grade) === String(def.grade));
+        const found = currentStatusRatios.find(r => r.subject === def.subject && String(r.grade) === String(def.grade));
         return found ? found : { ...def, year: '2026', semester: '1', id: `def_status_2026_1_${def.grade}_${def.subject}`.replace(/\s/g, '') };
       });
-      const toAdd = inputRatiosData.filter(r => !displayStatusRatios.some(d => d.subject === r.subject && String(d.grade) === String(r.grade)));
+      const toAdd = currentStatusRatios.filter(r => !displayStatusRatios.some(d => d.subject === r.subject && String(d.grade) === String(r.grade)));
       displayStatusRatios = [...displayStatusRatios, ...toAdd];
     } else {
-      displayStatusRatios = [...inputRatiosData];
+      displayStatusRatios = [...currentStatusRatios];
     }
 
     if (displayStatusRatios.length === 0) {
