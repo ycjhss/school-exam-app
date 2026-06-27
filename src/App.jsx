@@ -33,7 +33,7 @@ const QrCodeIcon = (p) => <IconBase {...p}><rect width="5" height="5" x="3" y="3
 const SortAsc = (p) => <IconBase {...p}><path d="M11 11h9"/><path d="M11 15h6"/><path d="M11 19h3"/><path d="M11 7h10"/><path d="M6 21V3"/><path d="M2 17l4 4 4-4"/></IconBase>;
 
 // =========================================================
-// Firebase 기본 설정 (중복 제거 및 정상화)
+// Firebase 기본 설정
 // =========================================================
 const firebaseConfig = {
   apiKey: "AIzaSyCvslatUqinoFPE03kOJzp4ykBeHZuMuUU",
@@ -63,9 +63,9 @@ const getUserDoc = (name) => getUsersRef().doc(name);
 const calculateRequiredMonths = (startMonth = 3) => {
   const today = new Date();
   const year = today.getFullYear();
-  let currentMonth = today.getMonth() + 1;
+  let currentMonth = today.getMonth() + 1; // 1~12
 
-  if (currentMonth > 11) currentMonth = 11;
+  if (currentMonth > 11) currentMonth = 11; // 11월까지만 반영
 
   const months = [];
   for (let i = startMonth; i <= currentMonth; i++) {
@@ -75,8 +75,10 @@ const calculateRequiredMonths = (startMonth = 3) => {
   return months;
 };
 
+// 모든 학생이 기본적으로 적용받는 달 (3월 ~ 현재월)
 const BASE_REQUIRED_MONTHS = calculateRequiredMonths(3);
 
+// 전학생 등 예외 처리 (이름: 시작할 월)
 const START_MONTH_EXCEPTIONS = {
   "이소은": 4,  
 };
@@ -319,13 +321,13 @@ function App() {
       if (loginTab === 'teacher') {
         if (userSnap.exists) {
           const uData = userSnap.data();
-          if (uData.role !== 'teacher') { setLoginError('학생으로 등록된 이름입니다.'); return; }
+          if (uData.role !== 'teacher') { setLoginError('학생으로 등록된 이름입니다. 학생 탭을 이용해주세요.'); return; }
           if (!uData.password) { await getUserDoc(targetId).update({ password: pwd }); setCurrentUser({ role: 'teacher', name: targetId }); setView('teacher'); } 
           else if (uData.password === pwd) { setCurrentUser({ role: 'teacher', name: targetId }); setView('teacher'); } 
           else { setLoginError('비밀번호가 일치하지 않습니다.'); }
         } else { setLoginError('등록되지 않은 교사 계정입니다.'); }
       } else {
-        if (!userSnap.exists) { setLoginError('명단에 없는 학번/이름입니다.'); return; }
+        if (!userSnap.exists) { setLoginError('명단에 없는 학번/이름입니다. 담임선생님께 확인해주세요.'); return; }
         const uData = userSnap.data();
         if (uData.role !== 'student') { setLoginError('선생님으로 등록된 계정입니다.'); return; }
         if (!uData.password) { await getUserDoc(targetId).update({ password: pwd }); setCurrentUser({ role: 'student', name: targetId, teacherName: uData.teacherName }); setView('dashboard'); } 
@@ -363,8 +365,8 @@ function App() {
     setView('submit');
   };
 
-  const handleDelete = async (id) => { if (!firebaseUser) return; try { await getSubmissionDoc(id).delete(); } catch (error) {} };
-  const handleReview = async (id, status) => { if (!firebaseUser) return; try { await getSubmissionDoc(id).update({ status }); } catch (error) {} };
+  const handleDelete = async (id) => { if (!firebaseUser) return; try { await getSubmissionDoc(id).delete(); } catch (error) { console.error(error); } };
+  const handleReview = async (id, status) => { if (!firebaseUser) return; try { await getSubmissionDoc(id).update({ status }); } catch (error) { console.error(error); } };
 
   const handleUploadRoster = async () => {
     if (!uploadText.trim()) return; setUploadMessage('업로드 중...');
@@ -374,12 +376,12 @@ function App() {
       for (const line of lines) {
         const parts = line.split(/[\s\t]+/);
         if (parts.length < 2) { failCount++; continue; }
-        const docId = `${parts[0]} ${parts.slice(1).join(' ')}`;
+        const studentNum = parts[0]; const studentName = parts.slice(1).join(' '); const docId = `${studentNum} ${studentName}`;
         if (docId === 'ycjhss' || docId === currentUser.name) continue; 
         await getUserDoc(docId).set({ role: 'student', teacherName: myMainTeacherName }, { merge: true }); successCount++;
       }
       setUploadMessage(`성공적으로 ${successCount}명의 명단을 업데이트했습니다.` + (failCount > 0 ? ` (${failCount}건 오류 건너뜀)` : '')); setUploadText(''); setTimeout(() => setUploadMessage(''), 4000);
-    } catch (error) { setUploadMessage('오류가 발생했습니다.'); }
+    } catch (error) { console.error(error); setUploadMessage('업로드 중 오류가 발생했습니다.'); }
   };
 
   const handleUploadTeacherRoster = async () => {
@@ -388,21 +390,21 @@ function App() {
     try {
       for (const name of lines) { if (name === 'ycjhss') continue; await getUserDoc(name).set({ role: 'teacher' }, { merge: true }); successCount++; }
       setUploadTeacherMessage(`성공적으로 ${successCount}명의 교사 명단을 등록했습니다.`); setUploadTeacherText(''); setTimeout(() => setUploadTeacherMessage(''), 4000);
-    } catch (error) { setUploadTeacherMessage('오류가 발생했습니다.'); }
+    } catch (error) { console.error(error); setUploadTeacherMessage('업로드 중 오류가 발생했습니다.'); }
   };
 
   const handleAddCoTeacher = async () => {
     if (!coTeacherInput.trim() || !firebaseUser) return;
     try {
       const docRef = getUserDoc(currentUser.name); const docSnap = await docRef.get(); const currentCoTeachers = docSnap.exists ? (docSnap.data().coTeachers || []) : [];
-      if (!currentCoTeachers.includes(coTeacherInput.trim())) { await docRef.set({ coTeachers: firebase.firestore.FieldValue.arrayUnion(coTeacherInput.trim()) }, { merge: true }); setUploadMessage(`부담임 선생님 추가됨.`); setCoTeacherInput(''); } 
-      else { setUploadMessage(`이미 등록됨.`); }
+      if (!currentCoTeachers.includes(coTeacherInput.trim())) { await docRef.set({ coTeachers: firebase.firestore.FieldValue.arrayUnion(coTeacherInput.trim()) }, { merge: true }); setUploadMessage(`부담임 선생님이 추가되었습니다.`); setCoTeacherInput(''); } 
+      else { setUploadMessage(`이미 등록된 부담임 선생님입니다.`); }
       setTimeout(() => setUploadMessage(''), 3000);
-    } catch (error) { setUploadMessage('오류 발생.'); }
+    } catch (error) { console.error(error); setUploadMessage('추가 중 오류가 발생했습니다.'); }
   };
 
-  const handleRemoveCoTeacher = async (nameToRemove) => { try { await getUserDoc(currentUser.name).set({ coTeachers: firebase.firestore.FieldValue.arrayRemove(nameToRemove) }, { merge: true }); setUploadMessage('해제되었습니다.'); setTimeout(() => setUploadMessage(''), 3000); } catch (error) {} };
-  const handleResetPassword = async (name) => { try { await getUserDoc(name).update({ password: null }); setUploadMessage(`비밀번호 초기화됨.`); setTimeout(() => setUploadMessage(''), 3000); } catch (error) {} };
+  const handleRemoveCoTeacher = async (nameToRemove) => { try { await getUserDoc(currentUser.name).set({ coTeachers: firebase.firestore.FieldValue.arrayRemove(nameToRemove) }, { merge: true }); setUploadMessage('부담임 지정이 해제되었습니다.'); setTimeout(() => setUploadMessage(''), 3000); } catch (error) { console.error(error); } };
+  const handleResetPassword = async (name) => { try { await getUserDoc(name).update({ password: null }); setUploadMessage(`'${name}' 님의 비밀번호가 초기화되었습니다.`); setTimeout(() => setUploadMessage(''), 3000); } catch (error) { console.error(error); } };
   const handleDeleteStudent = (name) => { setDeleteTarget({ type: 'student', name }); };
   const handleDeleteUser = (name) => { setDeleteTarget({ type: 'teacher', name }); };
 
@@ -410,10 +412,10 @@ function App() {
     if (!deleteTarget) return; const { type, name } = deleteTarget; setDeleteTarget(null);
     try {
       await getUserDoc(name).delete();
-      if (type === 'student') { const userSubs = submissions.filter(s => s.studentName === name); for (const sub of userSubs) { await getSubmissionDoc(sub.id).delete(); } setUploadMessage(`삭제 완료.`); } 
-      else { setUploadMessage(`삭제 완료.`); }
+      if (type === 'student') { const userSubs = submissions.filter(s => s.studentName === name); for (const sub of userSubs) { await getSubmissionDoc(sub.id).delete(); } setUploadMessage(`'${name}' 학생 명단 및 기록이 삭제되었습니다.`); } 
+      else { setUploadMessage(`'${name}' 교사 계정이 삭제되었습니다.`); }
       setTimeout(() => setUploadMessage(''), 3000);
-    } catch (error) { setUploadMessage('오류 발생.'); setTimeout(() => setUploadMessage(''), 3000); }
+    } catch (error) { console.error(error); setUploadMessage('삭제 중 오류가 발생했습니다.'); setTimeout(() => setUploadMessage(''), 3000); }
   };
 
   const exportToCSV = () => {
@@ -428,7 +430,7 @@ function App() {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = "학급활동인증현황.csv"; document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
-  const handleDownloadQR = () => { if (qrImageUrl) { const link = document.createElement('a'); link.download = '학급앱_QR.png'; link.href = qrImageUrl; link.click(); } };
+  const handleDownloadQR = () => { if (qrImageUrl) { const link = document.createElement('a'); link.download = '학급앱_QR코드.png'; link.href = qrImageUrl; link.click(); } };
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50">로딩 중...</div>;
 
@@ -479,9 +481,13 @@ function App() {
           <div className="flex items-center space-x-2"><Award className="text-indigo-600" size={24} /><span className="font-bold text-lg hidden sm:block">학급 활동 인증 시스템</span></div>
           <div className="flex items-center space-x-4">
             <span className="text-sm font-medium px-4 py-1.5 bg-indigo-50 text-indigo-700 rounded-full">
-              {currentUser.role === 'admin' ? '👑 전체 관리자' : currentUser.role === 'teacher' ? (currentUser.name === myMainTeacherName ? `👨‍🏫 ${currentUser.name} 선생님` : `👨‍🏫 ${currentUser.name} (${myMainTeacherName}반)`) : `🧑‍🎓 ${currentUser.name}`}
+              {currentUser.role === 'admin' ? '👑 전체 관리자' : currentUser.role === 'teacher' ? (currentUser.name === myMainTeacherName ? `👨‍🏫 ${currentUser.name} 선생님` : `👨‍🏫 ${currentUser.name} (${myMainTeacherName}반 부담임)`) : `🧑‍🎓 ${currentUser.name}`}
             </span>
-            {currentUser.role !== 'student' && <button onClick={() => setShowQrModal(true)} className="text-gray-500 hover:text-indigo-600 p-2"><QrCodeIcon size={20} /></button>}
+            {currentUser.role !== 'student' && (
+              <button onClick={() => setShowQrModal(true)} className="text-gray-500 hover:text-indigo-600 p-2 transition-colors" title="접속 QR 코드 확인">
+                <QrCodeIcon size={20} />
+              </button>
+            )}
             <button onClick={handleLogout} className="text-gray-500 hover:text-gray-700 p-2"><LogOut size={18} /></button>
           </div>
         </div>
@@ -490,14 +496,21 @@ function App() {
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         {showQrModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm text-center relative">
-              <button onClick={() => setShowQrModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={24} /></button>
-              <h2 className="text-xl font-bold mb-2">접속 QR코드</h2>
-              <div className="flex justify-center mb-6 p-4 bg-gray-50 rounded-xl min-h-[250px] items-center">
-                {qrImageUrl ? <img src={qrImageUrl} alt="QR" className="w-[250px] h-[250px] rounded-lg shadow-sm" /> : <div>QR코드 생성 중...</div>}
+            <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm text-center relative animate-in fade-in zoom-in duration-200">
+              <button onClick={() => setShowQrModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition">
+                <X size={24} />
+              </button>
+              <h2 className="text-xl font-bold text-gray-800 mb-2">학급 앱 접속 QR코드</h2>
+              <p className="text-sm text-gray-500 mb-6">스마트폰 카메라로 스캔하여 바로 접속할 수 있습니다.</p>
+              <div className="flex justify-center mb-6 p-4 bg-gray-50 rounded-xl border border-gray-100 min-h-[250px] items-center">
+                {qrImageUrl ? (
+                  <img src={qrImageUrl} alt="접속 QR코드" className="w-[250px] h-[250px] rounded-lg shadow-sm" />
+                ) : (
+                  <div className="text-gray-400 font-medium">QR코드 생성 중...</div>
+                )}
               </div>
-              <button onClick={handleDownloadQR} disabled={!qrImageUrl} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg flex items-center justify-center">
-                <Download size={18} className="mr-2" /> 이미지로 저장하기
+              <button onClick={handleDownloadQR} disabled={!qrImageUrl} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-bold py-3 rounded-lg flex items-center justify-center transition shadow-sm">
+                <Download size={18} className="mr-2" /> 이미지로 저장하여 프린트하기
               </button>
             </div>
           </div>
@@ -505,13 +518,16 @@ function App() {
 
         {deleteTarget && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm text-center relative">
+            <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm text-center relative animate-in fade-in zoom-in duration-200">
               <AlertCircle size={40} className="mx-auto text-red-500 mb-4" />
-              <h2 className="text-xl font-bold mb-2">명단 삭제 확인</h2>
-              <p className="text-sm text-gray-600 mb-6">정말로 <strong>{deleteTarget.name}</strong> 삭제하시겠습니까?</p>
+              <h2 className="text-xl font-bold text-gray-800 mb-2">명단 삭제 확인</h2>
+              <p className="text-sm text-gray-600 mb-6">
+                정말로 <strong>{deleteTarget.name}</strong> {deleteTarget.type === 'student' ? '학생' : '교사'} 명단을 삭제하시겠습니까?<br/>
+                {deleteTarget.type === 'student' && <span className="text-red-500 font-medium text-xs mt-2 block">※ 주의: 해당 학생의 모든 활동 제출 기록도 함께 삭제됩니다.</span>}
+              </p>
               <div className="flex space-x-3">
-                <button onClick={() => setDeleteTarget(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 font-bold py-2.5 rounded-lg">취소</button>
-                <button onClick={executeDelete} className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2.5 rounded-lg">삭제하기</button>
+                <button onClick={() => setDeleteTarget(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold py-2.5 rounded-lg transition">취소</button>
+                <button onClick={executeDelete} className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2.5 rounded-lg transition">삭제하기</button>
               </div>
             </div>
           </div>
@@ -526,12 +542,23 @@ function App() {
           )}
           {currentUser.role !== 'student' && (
             <>
-              <button onClick={() => { setView('teacher'); setTeacherTab('pending'); resetForm(); }} className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap ${(view === 'teacher' && teacherTab === 'pending') ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600'}`}>승인 대기</button>
+              <button onClick={() => { setView('teacher'); setTeacherTab('pending'); resetForm(); }} className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap ${(view === 'teacher' && teacherTab === 'pending') ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600'}`}>승인 대기 ({visibleSubmissions.filter(s => s.status === 'pending').length})</button>
               <button onClick={() => { setView('teacher'); setTeacherTab('all'); }} className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap ${(view === 'teacher' && teacherTab === 'all') ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600'}`}>전체 조회</button>
               <button onClick={() => { setView('teacher'); setTeacherTab('students'); }} className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap ${(view === 'teacher' && teacherTab === 'students') ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600'}`}>{currentUser.role === 'admin' ? '사용자 관리' : '학생 관리'}</button>
             </>
           )}
         </div>
+
+        {currentUser.role === 'teacher' && currentUser.name === myMainTeacherName && classRoster.length === 0 && view === 'teacher' && teacherTab !== 'submit' && (
+          <div className="bg-yellow-50 border border-yellow-200 p-5 rounded-xl shadow-sm text-sm text-yellow-800 leading-relaxed">
+            <AlertCircle size={20} className="inline mr-2 mb-1 text-yellow-600" />
+            <b>현재 표시할 학생 명단이 없습니다.</b>
+            <ul className="list-disc ml-8 mt-2 space-y-1">
+              <li><b>담임 선생님이시라면:</b> [학생 관리] 탭에서 학생 명단을 먼저 업로드해 주세요.</li>
+              <li><b>부담임 선생님이시라면:</b> 담임 선생님의 접속 화면 [학생 관리] 탭에서 선생님의 이름(<b>{currentUser.name}</b>)을 정확히 등록해 주셔야 데이터가 연동됩니다.</li>
+            </ul>
+          </div>
+        )}
 
         {/* 학생 화면 */}
         {view === 'dashboard' && currentUser.role === 'student' && myStats && (
@@ -575,22 +602,14 @@ function App() {
               </div>
             </div>
 
-            {/* ★ 학생 화면 학급 상황판 업데이트 (다른 친구들 시간 표시 포함) ★ */}
+            {/* 학급 상황판 (학생 화면용 - 다른 친구들 상세 시간 표시 포함) */}
             <div className="bg-white rounded-2xl shadow-sm border p-6 md:p-8">
               <h2 className="text-xl font-bold mb-4">학급 상황판</h2>
               <div className="overflow-x-auto w-full">
                 <table className="w-full text-sm border-collapse min-w-max">
-                  <thead>
-                    <tr className="bg-slate-50 border-b">
-                      <th className="p-3 whitespace-nowrap min-w-[160px] text-center align-middle"><div className="inline-grid grid-cols-2 gap-2 w-36"><span className="text-center">학번</span><span className="text-center">이름</span></div></th>
-                      <th className="p-3 text-center whitespace-nowrap align-middle">진행도</th>
-                      <th className="p-3 text-center align-middle">1번<br/><span className="text-[10px] font-normal text-gray-500">자기주도학습</span></th>
-                      {[2,3,4,5,6,7].map(n=><th key={n} className="p-3 text-center align-middle">{n}번</th>)}
-                    </tr>
-                  </thead>
+                  <thead><tr className="bg-slate-50 border-b"><th className="p-3 whitespace-nowrap min-w-[160px] text-center align-middle"><div className="inline-grid grid-cols-2 gap-2 w-36"><span className="text-center">학번</span><span className="text-center">이름</span></div></th><th className="p-3 text-center whitespace-nowrap align-middle">진행도</th>{[1,2,3,4,5,6,7].map(n=><th key={n} className="p-3 text-center align-middle">{n}번</th>)}</tr></thead>
                   <tbody>
                     {classStats.map(student => {
-                      // 1번 항목 달성 여부 및 표시 내용 계산
                       const reqM = getStudentReqMonths(student.name);
                       const cat1IsMet = reqM.length > 0 && reqM.every(m => student.categories[1][m] && student.categories[1][m].hours >= 7);
 
@@ -599,15 +618,12 @@ function App() {
                           <td className="p-3 font-medium whitespace-nowrap text-center align-middle">{formatName(student.name)}</td>
                           <td className="p-3 text-center font-bold align-middle text-indigo-600">{Math.round((student.metCount/7)*100)}%</td>
                           
-                          {/* 1번 자기주도학습 상세 표시 */}
                           <td className="p-3 text-center align-middle">
                             <div className="flex flex-col items-center justify-center">
                               {cat1IsMet ? <CheckCircle size={16} className="text-green-500 mb-1" /> : <X size={16} className="text-gray-300 mb-1" />}
                               <span className="text-[10px] text-gray-500 whitespace-pre-wrap leading-tight max-w-[90px]">
                                 {BASE_REQUIRED_MONTHS.map(m => {
-                                  if (!reqM.includes(m)) {
-                                      return <div key={m} className="text-gray-400 font-medium">{m.split('-')[1]}월: 면제</div>;
-                                  }
+                                  if (!reqM.includes(m)) return <div key={m} className="text-gray-400">{m.split('-')[1]}월:면제</div>;
                                   const d = student.categories[1][m];
                                   const isPass = d && d.hours >= 7;
                                   return <div key={m} className={isPass ? 'text-green-600 font-bold' : 'text-red-500 font-bold'}>{m.split('-')[1]}월: {d ? d.hours : 0}h</div>;
@@ -616,7 +632,6 @@ function App() {
                             </div>
                           </td>
 
-                          {/* 2~7번 항목 표시 */}
                           {[2,3,4,5,6,7].map(n => {
                             const isMet = student.categories[n].length > 0;
                             return <td key={n} className="p-3 text-center align-middle">{isMet ? <CheckCircle size={16} className="text-green-500 mx-auto"/> : '-'}</td>;
@@ -653,7 +668,6 @@ function App() {
           </div>
         )}
 
-        {/* 제출 폼 */}
         {view === 'submit' && (
           <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border p-6 md:p-8">
             <h2 className="text-2xl font-bold mb-6">{editingId ? '활동 수정하기' : '새 활동 제출하기'}</h2>
@@ -691,7 +705,6 @@ function App() {
           </div>
         )}
 
-        {/* 선생님 대시보드 */}
         {view === 'teacher' && currentUser.role !== 'student' && (
           <div className="space-y-8">
             {teacherTab === 'all' && (
