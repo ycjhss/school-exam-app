@@ -33,7 +33,7 @@ const QrCodeIcon = (p) => <IconBase {...p}><rect width="5" height="5" x="3" y="3
 const SortAsc = (p) => <IconBase {...p}><path d="M11 11h9"/><path d="M11 15h6"/><path d="M11 19h3"/><path d="M11 7h10"/><path d="M6 21V3"/><path d="M2 17l4 4 4-4"/></IconBase>;
 
 // =========================================================
-// Firebase 기본 설정
+// Firebase 기본 설정 (중복 제거 및 정상화)
 // =========================================================
 const firebaseConfig = {
   apiKey: "AIzaSyCvslatUqinoFPE03kOJzp4ykBeHZuMuUU",
@@ -63,9 +63,9 @@ const getUserDoc = (name) => getUsersRef().doc(name);
 const calculateRequiredMonths = (startMonth = 3) => {
   const today = new Date();
   const year = today.getFullYear();
-  let currentMonth = today.getMonth() + 1; // 1~12
+  let currentMonth = today.getMonth() + 1;
 
-  if (currentMonth > 11) currentMonth = 11; // 11월까지만 반영
+  if (currentMonth > 11) currentMonth = 11;
 
   const months = [];
   for (let i = startMonth; i <= currentMonth; i++) {
@@ -75,10 +75,8 @@ const calculateRequiredMonths = (startMonth = 3) => {
   return months;
 };
 
-// 모든 학생이 기본적으로 적용받는 달 (3월 ~ 현재월)
 const BASE_REQUIRED_MONTHS = calculateRequiredMonths(3);
 
-// 전학생 등 예외 처리 (이름: 시작할 월)
 const START_MONTH_EXCEPTIONS = {
   "이소은": 4,  
 };
@@ -577,7 +575,7 @@ function App() {
               </div>
             </div>
 
-            {/* ★ 학생 화면 학급 상황판 업데이트 (다른 친구들 시간 표시) ★ */}
+            {/* ★ 학생 화면 학급 상황판 업데이트 (다른 친구들 시간 표시 포함) ★ */}
             <div className="bg-white rounded-2xl shadow-sm border p-6 md:p-8">
               <h2 className="text-xl font-bold mb-4">학급 상황판</h2>
               <div className="overflow-x-auto w-full">
