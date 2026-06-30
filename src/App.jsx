@@ -1189,22 +1189,23 @@ export default function App() {
   };
 
   const renderInputRatioTable = () => {
-    const inputRatiosData = (assessmentRatios || []).filter(r => String(r?.year || '') === String(ratioYear) && String(r?.semester || '') === String(ratioSem));
+    // 💡 오류의 원인이었던 참조 에러를 해결하기 위해 함수 내부에 안전하게 데이터 구성
+    const currentInputRatios = (assessmentRatios || []).filter(r => String(r?.year || '') === String(ratioYear) && String(r?.semester || '') === String(ratioSem));
     let ratiosToDisplay = [];
     if (String(ratioYear) === '2026' && String(ratioSem) === '1') {
       ratiosToDisplay = defaultAssessment2026S1.map(def => {
-        const found = inputRatiosData.find(r => r.subject === def.subject && String(r.grade) === String(def.grade));
+        const found = currentInputRatios.find(r => r.subject === def.subject && String(r.grade) === String(def.grade));
         return found ? found : { ...def, year: '2026', semester: '1', id: `def_2026_1_${def.grade}_${def.subject}`.replace(/\s/g, ''), isUnsavedDefault: true };
       });
-      inputRatiosData.forEach(r => {
+      currentInputRatios.forEach(r => {
         if (!ratiosToDisplay.find(d => d.subject === r.subject && String(d.grade) === String(r.grade))) ratiosToDisplay.push(r);
       });
     } else {
-      ratiosToDisplay = [...inputRatiosData];
+      ratiosToDisplay = [...currentInputRatios];
     }
     return (
       <>
-        {String(ratioYear) === '2026' && String(ratioSem) === '1' && inputRatiosData.length === 0 && (
+        {String(ratioYear) === '2026' && String(ratioSem) === '1' && currentInputRatios.length === 0 && (
           <div className="mb-6 p-6 bg-amber-50 border border-amber-200 rounded-2xl text-center print:hidden">
             <p className="text-amber-800 font-bold mb-3">2026학년도 1학기 데이터가 아직 없습니다.</p>
             <button onClick={() => {}} className="bg-amber-600 text-white px-6 py-2.5 rounded-xl font-black shadow-md hover:bg-amber-700 active:scale-95 transition-all">
