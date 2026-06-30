@@ -359,7 +359,12 @@ export default function App() {
   const [examCutoffs, setExamCutoffs] = useState([]);
   const [localCutoffExam, setLocalCutoffExam] = useState('');
   const [cutoffSubjectGrade, setCutoffSubjectGrade] = useState('');
-  const [cutoffScores, setCutoffScores] = useState({ ab: '', bc: '', cd: '', de: '', ei: '' });
+  const [cutoffScores, setCutoffScores] = useState({ 
+    ab: '', bc: '', cd: '', de: '', ei: '',
+    ratio1: '', ab1: '', bc1: '', cd1: '', de1: '', ei1: '',
+    ratio2: '', ab2: '', bc2: '', cd2: '', de2: '', ei2: '',
+    ratioP: '', abP: '', bcP: '', cdP: '', deP: '', eiP: ''
+  });
   const [cutoffTeacher, setCutoffTeacher] = useState('');
 
   const [assessmentRatios, setAssessmentRatios] = useState([]);
@@ -487,9 +492,10 @@ export default function App() {
   const viewingScopes = examScopes.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
   const viewingCutoffs = examCutoffs.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
 
+  // 💡 학기말고사를 위해 1, 2차, 수행 기록을 연동 및 폼 자동 채움
   useEffect(() => {
     if (!cutoffSubjectGrade) {
-      setCutoffScores({ ab: '', bc: '', cd: '', de: '', ei: '' });
+      setCutoffScores({ ab: '', bc: '', cd: '', de: '', ei: '', ratio1: '', ab1: '', bc1: '', cd1: '', de1: '', ei1: '', ratio2: '', ab2: '', bc2: '', cd2: '', de2: '', ei2: '', ratioP: '', abP: '', bcP: '', cdP: '', deP: '', eiP: '' });
       setCutoffTeacher('');
       return;
     }
@@ -498,20 +504,50 @@ export default function App() {
     const docId = `${vYear}_${vSem}_${vExam}_${g}_${subjectName}`.replace(/\s/g, '');
     const existingCutoff = (examCutoffs || []).find(c => c.id === docId);
 
-    if (existingCutoff) {
+    if (vExam === '학기말고사') {
+      const c1 = (examCutoffs || []).find(c => c.id === `${vYear}_${vSem}_1차정기시험_${g}_${subjectName}`.replace(/\s/g, ''));
+      const c2 = (examCutoffs || []).find(c => c.id === `${vYear}_${vSem}_2차정기시험_${g}_${subjectName}`.replace(/\s/g, ''));
+      const cP = (examCutoffs || []).find(c => c.id === `${vYear}_${vSem}_수행평가_${g}_${subjectName}`.replace(/\s/g, ''));
+      
+      let allRatios = assessmentRatios || [];
+      if (vYear === '2026' && vSem === '1') {
+        const unsavedDefaults = defaultAssessment2026S1.filter(def => !allRatios.some(r => r.subject === def.subject && String(r.grade) === String(def.grade)));
+        allRatios = [...allRatios, ...unsavedDefaults];
+      }
+      const ratioDoc = allRatios.find(r => r.subject === subjectName && String(r.grade) === String(g));
+      const exRat = (val) => val ? String(val).split('(')[0].replace(/[^0-9.]/g, '') : '';
+
+      let perfSum = 0;
+      if (ratioDoc) {
+        ['perf1', 'perf2', 'perf3', 'perf4', 'perf5'].forEach(k => {
+          const v = exRat(ratioDoc[k]);
+          if (v) perfSum += parseFloat(v);
+        });
+      }
+
       setCutoffScores({
-        ab: existingCutoff.ab || '',
-        bc: existingCutoff.bc || '',
-        cd: existingCutoff.cd || '',
-        de: existingCutoff.de || '',
-        ei: existingCutoff.ei || ''
+        ab: existingCutoff?.ab || '', bc: existingCutoff?.bc || '', cd: existingCutoff?.cd || '', de: existingCutoff?.de || '', ei: existingCutoff?.ei || '',
+        ratio1: existingCutoff?.ratio1 || (ratioDoc ? exRat(ratioDoc.exam1) : ''),
+        ab1: existingCutoff?.ab1 || c1?.ab || '', bc1: existingCutoff?.bc1 || c1?.bc || '', cd1: existingCutoff?.cd1 || c1?.cd || '', de1: existingCutoff?.de1 || c1?.de || '', ei1: existingCutoff?.ei1 || c1?.ei || '',
+        ratio2: existingCutoff?.ratio2 || (ratioDoc ? exRat(ratioDoc.exam2) : ''),
+        ab2: existingCutoff?.ab2 || c2?.ab || '', bc2: existingCutoff?.bc2 || c2?.bc || '', cd2: existingCutoff?.cd2 || c2?.cd || '', de2: existingCutoff?.de2 || c2?.de || '', ei2: existingCutoff?.ei2 || c2?.ei || '',
+        ratioP: existingCutoff?.ratioP || (perfSum > 0 ? String(perfSum) : ''),
+        abP: existingCutoff?.abP || cP?.ab || '', bcP: existingCutoff?.bcP || cP?.bc || '', cdP: existingCutoff?.cdP || cP?.cd || '', deP: existingCutoff?.deP || cP?.de || '', eiP: existingCutoff?.eiP || cP?.ei || ''
       });
-      setCutoffTeacher(existingCutoff.teacherName || '');
+      setCutoffTeacher(existingCutoff?.teacherName || '');
     } else {
-      setCutoffScores({ ab: '', bc: '', cd: '', de: '', ei: '' });
-      setCutoffTeacher('');
+      if (existingCutoff) {
+        setCutoffScores({
+          ab: existingCutoff.ab || '', bc: existingCutoff.bc || '', cd: existingCutoff.cd || '', de: existingCutoff.de || '', ei: existingCutoff.ei || '',
+          ratio1: '', ab1: '', bc1: '', cd1: '', de1: '', ei1: '', ratio2: '', ab2: '', bc2: '', cd2: '', de2: '', ei2: '', ratioP: '', abP: '', bcP: '', cdP: '', deP: '', eiP: ''
+        });
+        setCutoffTeacher(existingCutoff.teacherName || '');
+      } else {
+        setCutoffScores({ ab: '', bc: '', cd: '', de: '', ei: '', ratio1: '', ab1: '', bc1: '', cd1: '', de1: '', ei1: '', ratio2: '', ab2: '', bc2: '', cd2: '', de2: '', ei2: '', ratioP: '', abP: '', bcP: '', cdP: '', deP: '', eiP: '' });
+        setCutoffTeacher('');
+      }
     }
-  }, [cutoffSubjectGrade, vYear, vSem, vExam, examCutoffs]);
+  }, [cutoffSubjectGrade, vYear, vSem, vExam, examCutoffs, assessmentRatios]);
 
   let scheduleToDisplay = (globalSettings.schedules?.[currentExamKey] || []).filter(Boolean);
   if (scheduleToDisplay.length === 0) {
@@ -540,7 +576,6 @@ export default function App() {
     }
   });
 
-  // 💡 학기말고사 로직 추가: 학기말고사 선택 시 1, 2차 정기고사에서 입력했던 교과들을 자동으로 불러옵니다.
   let cutoffSubjectOptions = [];
   if (vExam === '수행평가') {
     const perfKey = `${vYear}|${vSem}`;
@@ -616,7 +651,10 @@ export default function App() {
     e.preventDefault();
     if (!cutoffSubjectGrade) { alert("과목을 선택해주세요."); return; }
     
-    const isAllEmpty = !cutoffScores.ab && !cutoffScores.bc && !cutoffScores.cd && !cutoffScores.de && !cutoffScores.ei;
+    const isAllEmpty = vExam === '학기말고사' 
+      ? !cutoffScores.ab && !cutoffScores.bc && !cutoffScores.cd && !cutoffScores.de && !cutoffScores.ei
+      : !cutoffScores.ab && !cutoffScores.bc && !cutoffScores.cd && !cutoffScores.de && !cutoffScores.ei;
+
     if (!isAllEmpty && !cutoffTeacher.trim()) { alert("입력자 성함을 필수적으로 입력해주세요."); return; }
 
     setIsSaving(true);
@@ -628,11 +666,19 @@ export default function App() {
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examCutoffs', docId));
         alert("입력된 점수가 없어 기존 기록이 완전히 삭제(초기화)되었습니다.");
       } else {
-        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examCutoffs', docId), {
+        const dataToSave = {
           year: vYear, semester: vSem, examName: vExam, grade: g, subject: s,
           ab: cutoffScores.ab, bc: cutoffScores.bc, cd: cutoffScores.cd, de: cutoffScores.de, ei: cutoffScores.ei,
           teacherName: cutoffTeacher.trim(), updatedAt: serverTimestamp()
-        });
+        };
+        
+        if (vExam === '학기말고사') {
+          dataToSave.ratio1 = cutoffScores.ratio1; dataToSave.ab1 = cutoffScores.ab1; dataToSave.bc1 = cutoffScores.bc1; dataToSave.cd1 = cutoffScores.cd1; dataToSave.de1 = cutoffScores.de1; dataToSave.ei1 = cutoffScores.ei1;
+          dataToSave.ratio2 = cutoffScores.ratio2; dataToSave.ab2 = cutoffScores.ab2; dataToSave.bc2 = cutoffScores.bc2; dataToSave.cd2 = cutoffScores.cd2; dataToSave.de2 = cutoffScores.de2; dataToSave.ei2 = cutoffScores.ei2;
+          dataToSave.ratioP = cutoffScores.ratioP; dataToSave.abP = cutoffScores.abP; dataToSave.bcP = cutoffScores.bcP; dataToSave.cdP = cutoffScores.cdP; dataToSave.deP = cutoffScores.deP; dataToSave.eiP = cutoffScores.eiP;
+        }
+
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examCutoffs', docId), dataToSave);
         alert("추정분할 점수가 안전하게 저장되었습니다.");
       }
       setCutoffSubjectGrade('');
@@ -894,7 +940,7 @@ export default function App() {
         : '';
       if (currentDocId === cutoffRecord.id) {
         setCutoffSubjectGrade('');
-        setCutoffScores({ ab: '', bc: '', cd: '', de: '', ei: '' });
+        setCutoffScores({ ab: '', bc: '', cd: '', de: '', ei: '', ratio1: '', ab1: '', bc1: '', cd1: '', de1: '', ei1: '', ratio2: '', ab2: '', bc2: '', cd2: '', de2: '', ei2: '', ratioP: '', abP: '', bcP: '', cdP: '', deP: '', eiP: '' });
         setCutoffTeacher('');
       }
     } catch (error) {
@@ -974,17 +1020,38 @@ export default function App() {
     link.download = `시험범위표_${vYear}_${vSem}학기_${vExam}.csv`; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
   };
 
+  // 💡 학기말고사 CSV 추출 로직 지원
   const handleExportCutoffCSV = () => {
-    let csv = "\uFEFF과목명(학년),A/B,B/C,C/D,D/E,E/I\n";
-    cutoffSubjectOptions.forEach(item => {
-      if(!item) return;
-      const docId = `${vYear}_${vSem}_${vExam}_${item.grade}_${item.subject}`.replace(/\s/g, '');
-      const cutoffDoc = viewingCutoffs.find(c => c.id === docId);
-      if (cutoffDoc) {
-        const row = [`${item.subject}(${item.grade})`, cutoffDoc.ab, cutoffDoc.bc, cutoffDoc.cd, cutoffDoc.de, cutoffDoc.ei];
-        csv += row.map(escapeCSV).join(',') + '\n';
-      }
-    });
+    let csv = "";
+    if (vExam === '학기말고사') {
+      csv += "\uFEFF과목명(학년),1차비율,1차A/B,1차B/C,1차C/D,1차D/E,1차E/미도달,2차비율,2차A/B,2차B/C,2차C/D,2차D/E,2차E/미도달,수행비율,수행A/B,수행B/C,수행C/D,수행D/E,수행E/미도달,최종A/B,최종B/C,최종C/D,최종D/E,최종E/미도달\n";
+      cutoffSubjectOptions.forEach(item => {
+        if(!item) return;
+        const docId = `${vYear}_${vSem}_${vExam}_${item.grade}_${item.subject}`.replace(/\s/g, '');
+        const c = viewingCutoffs.find(doc => doc.id === docId);
+        if (c) {
+          const row = [
+            `${item.subject}(${item.grade})`,
+            c.ratio1, c.ab1, c.bc1, c.cd1, c.de1, c.ei1,
+            c.ratio2, c.ab2, c.bc2, c.cd2, c.de2, c.ei2,
+            c.ratioP, c.abP, c.bcP, c.cdP, c.deP, c.eiP,
+            c.ab, c.bc, c.cd, c.de, c.ei
+          ];
+          csv += row.map(escapeCSV).join(',') + '\n';
+        }
+      });
+    } else {
+      csv += "\uFEFF과목명(학년),A/B,B/C,C/D,D/E,E/I\n";
+      cutoffSubjectOptions.forEach(item => {
+        if(!item) return;
+        const docId = `${vYear}_${vSem}_${vExam}_${item.grade}_${item.subject}`.replace(/\s/g, '');
+        const cutoffDoc = viewingCutoffs.find(c => c.id === docId);
+        if (cutoffDoc) {
+          const row = [`${item.subject}(${item.grade})`, cutoffDoc.ab, cutoffDoc.bc, cutoffDoc.cd, cutoffDoc.de, cutoffDoc.ei];
+          csv += row.map(escapeCSV).join(',') + '\n';
+        }
+      });
+    }
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url;
     link.download = `추정분할점수표_${vYear}_${vSem}학기_${vExam}.csv`; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
@@ -1083,6 +1150,88 @@ export default function App() {
     }).filter(Boolean);
 
     if (submittedCutoffs.length === 0) return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">입력된 추정분할 점수가 없습니다.</div>;
+
+    // 💡 학기말고사일 경우 복합 표 렌더링
+    if (e === '학기말고사') {
+      return (
+        <div className={`w-full overflow-x-auto ${isPrintView ? 'print:overflow-visible' : 'bg-white rounded-2xl shadow-sm border border-gray-200'}`}>
+          <table className={`w-full border-collapse border-2 border-black text-center text-[12px] ${isPrintView ? 'print:text-[10px] print:w-full' : ''}`}>
+            <thead>
+              <tr className="bg-amber-100">
+                <th rowSpan={2} className="border-2 border-black p-2 whitespace-nowrap">학년</th>
+                <th rowSpan={2} className="border-2 border-black p-2 min-w-[80px]">과목</th>
+                <th rowSpan={2} className="border-2 border-black p-2 whitespace-nowrap">정기시험/<br/>수행평가</th>
+                <th rowSpan={2} className="border-2 border-black p-2 whitespace-nowrap">반영비율</th>
+                <th rowSpan={2} className="border-2 border-black p-2 whitespace-nowrap">고사/영역</th>
+                <th colSpan={5} className="border-2 border-black p-2">성취수준별 추정분할점수 (단위: 점)</th>
+                {!isPrintView && <th rowSpan={2} className="border-2 border-black p-2 whitespace-nowrap print:hidden">기록 정보</th>}
+              </tr>
+              <tr className="bg-amber-100">
+                <th className="border-2 border-black p-1 w-12">A/B</th>
+                <th className="border-2 border-black p-1 w-12">B/C</th>
+                <th className="border-2 border-black p-1 w-12">C/D</th>
+                <th className="border-2 border-black p-1 w-12">D/E</th>
+                <th className="border-2 border-black p-1 w-14">E/미도달</th>
+              </tr>
+            </thead>
+            <tbody>
+              {submittedCutoffs.map((item, idx) => (
+                <React.Fragment key={idx}>
+                  {/* 1차 */}
+                  <tr>
+                    <td rowSpan={4} className="border border-black p-2 font-bold bg-white align-middle">{String(item.grade || '')}</td>
+                    <td rowSpan={4} className="border border-black p-2 font-bold bg-white align-middle">{String(item.subject || '')}</td>
+                    <td rowSpan={2} className="border border-black p-2 bg-white align-middle">정기시험</td>
+                    <td className="border border-black p-1 bg-white align-middle">{String(item.ratio1 || '')}</td>
+                    <td className="border border-black p-2 bg-white align-middle whitespace-nowrap">1차 정기</td>
+                    <td className="border border-black p-1 bg-white align-middle">{String(item.ab1 || '')}</td>
+                    <td className="border border-black p-1 bg-white align-middle">{String(item.bc1 || '')}</td>
+                    <td className="border border-black p-1 bg-white align-middle">{String(item.cd1 || '')}</td>
+                    <td className="border border-black p-1 bg-white align-middle">{String(item.de1 || '')}</td>
+                    <td className="border border-black p-1 bg-white align-middle">{String(item.ei1 || '')}</td>
+                    {!isPrintView && (
+                      <td rowSpan={4} className="border border-black p-2 text-[10px] text-gray-500 leading-tight bg-white align-middle print:hidden">
+                        {String(item.teacherName || '-')}<br/>({getDisplayDate(item)})
+                      </td>
+                    )}
+                  </tr>
+                  {/* 2차 */}
+                  <tr>
+                    <td className="border border-black p-1 bg-white align-middle">{String(item.ratio2 || '')}</td>
+                    <td className="border border-black p-2 bg-white align-middle whitespace-nowrap">2차 정기</td>
+                    <td className="border border-black p-1 bg-white align-middle">{String(item.ab2 || '')}</td>
+                    <td className="border border-black p-1 bg-white align-middle">{String(item.bc2 || '')}</td>
+                    <td className="border border-black p-1 bg-white align-middle">{String(item.cd2 || '')}</td>
+                    <td className="border border-black p-1 bg-white align-middle">{String(item.de2 || '')}</td>
+                    <td className="border border-black p-1 bg-white align-middle">{String(item.ei2 || '')}</td>
+                  </tr>
+                  {/* 수행 */}
+                  <tr>
+                    <td className="border border-black p-2 bg-white align-middle">수행평가</td>
+                    <td className="border border-black p-1 bg-white align-middle">{String(item.ratioP || '')}</td>
+                    <td className="border border-black p-2 bg-white align-middle whitespace-nowrap">[전체영역]</td>
+                    <td className="border border-black p-1 bg-white align-middle">{String(item.abP || '')}</td>
+                    <td className="border border-black p-1 bg-white align-middle">{String(item.bcP || '')}</td>
+                    <td className="border border-black p-1 bg-white align-middle">{String(item.cdP || '')}</td>
+                    <td className="border border-black p-1 bg-white align-middle">{String(item.deP || '')}</td>
+                    <td className="border border-black p-1 bg-white align-middle">{String(item.eiP || '')}</td>
+                  </tr>
+                  {/* 학기말 */}
+                  <tr className="bg-amber-50 font-bold">
+                    <td colSpan={3} className="border border-black p-2 align-middle">학기말 최종 추정분할 점수</td>
+                    <td className="border border-black p-1 align-middle text-red-600">{String(item.ab || '')}</td>
+                    <td className="border border-black p-1 align-middle text-red-600">{String(item.bc || '')}</td>
+                    <td className="border border-black p-1 align-middle text-red-600">{String(item.cd || '')}</td>
+                    <td className="border border-black p-1 align-middle text-red-600">{String(item.de || '')}</td>
+                    <td className="border border-black p-1 align-middle text-red-600">{String(item.ei || '')}</td>
+                  </tr>
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
 
     return (
       <div className={`w-full overflow-x-auto ${isPrintView ? 'print:overflow-visible' : 'bg-white rounded-2xl shadow-sm border border-gray-200'}`}>
@@ -1511,7 +1660,7 @@ export default function App() {
 
           {/* 추정분할 점수 입력 화면 */}
           {viewMode === 'cutoff' && (
-            <div className="w-full max-w-md bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] overflow-hidden border border-white relative mt-4">
+            <div className={`w-full ${localCutoffExam === '학기말고사' ? 'max-w-5xl' : 'max-w-md'} bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] overflow-hidden border border-white relative mt-4 transition-all duration-300`}>
               <div className="px-6 pt-5 pb-0 print:hidden">
                 <button type="button" onClick={() => setViewMode('home')} className="text-xs font-black text-gray-500 hover:text-rose-600 bg-gray-50 hover:bg-rose-50 border border-gray-200 hover:border-rose-200 px-3 py-2 rounded-xl transition-all">← 첫 화면으로</button>
               </div>
@@ -1520,36 +1669,112 @@ export default function App() {
                 <p className="text-rose-100 text-sm font-medium opacity-90 relative z-10 mt-1">추정분할 하는 과목만 입력해 주세요.</p>
               </div>
               <form onSubmit={handleCutoffSubmit} className="p-8 space-y-5">
-                <div className="relative group">
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1">Exam Type (고사 종류)</label>
-                  <select value={localCutoffExam} onChange={e=>{setLocalCutoffExam(e.target.value); setCutoffSubjectGrade('');}} className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-base font-bold focus:border-rose-500 focus:bg-white transition-all appearance-none outline-none shadow-sm" required>
-                    <option value="1차 정기시험">1차 정기시험</option><option value="2차 정기시험">2차 정기시험</option><option value="수행평가">수행평가</option><option value="학기말고사">학기말고사</option>
-                  </select>
-                </div>
-                <div className="relative group">
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1">Subject (과목 선택)</label>
-                  <select value={cutoffSubjectGrade} onChange={e=>setCutoffSubjectGrade(e.target.value)} className="w-full p-4 bg-rose-50/50 border-2 border-rose-100 rounded-2xl text-base font-bold text-rose-900 focus:border-rose-500 focus:bg-white transition-all appearance-none outline-none shadow-sm" required>
-                    <option value="">과목명 (학년)을 선택하세요</option>
-                    {cutoffSubjectOptions.map((item, idx) => (
-                      <option key={idx} value={`${item.grade}|${item.subject}`}>{String(item.subject)} ({String(item.grade)}학년)</option>
-                    ))}
-                  </select>
-                  {cutoffSubjectOptions.length === 0 && <p className="text-xs text-red-500 mt-2 font-bold px-2">해당 고사에 등록된 과목이나 시간표가 없습니다. 관리자 메뉴에서 세팅해주세요.</p>}
+                <div className={`flex flex-col ${localCutoffExam === '학기말고사' ? 'sm:flex-row' : ''} gap-4`}>
+                  <div className="relative group flex-1">
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1">Exam Type (고사 종류)</label>
+                    <select value={localCutoffExam} onChange={e=>{setLocalCutoffExam(e.target.value); setCutoffSubjectGrade('');}} className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-base font-bold focus:border-rose-500 focus:bg-white transition-all appearance-none outline-none shadow-sm" required>
+                      <option value="1차 정기시험">1차 정기시험</option><option value="2차 정기시험">2차 정기시험</option><option value="수행평가">수행평가</option><option value="학기말고사">학기말고사</option>
+                    </select>
+                  </div>
+                  <div className="relative group flex-1">
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1">Subject (과목 선택)</label>
+                    <select value={cutoffSubjectGrade} onChange={e=>setCutoffSubjectGrade(e.target.value)} className="w-full p-4 bg-rose-50/50 border-2 border-rose-100 rounded-2xl text-base font-bold text-rose-900 focus:border-rose-500 focus:bg-white transition-all appearance-none outline-none shadow-sm" required>
+                      <option value="">과목명 (학년)을 선택하세요</option>
+                      {cutoffSubjectOptions.map((item, idx) => (
+                        <option key={idx} value={`${item.grade}|${item.subject}`}>{String(item.subject)} ({String(item.grade)}학년)</option>
+                      ))}
+                    </select>
+                    {cutoffSubjectOptions.length === 0 && <p className="text-xs text-red-500 mt-2 font-bold px-2">해당 고사에 등록된 과목이나 시간표가 없습니다. 관리자 메뉴에서 세팅해주세요.</p>}
+                  </div>
                 </div>
                 
                 {cutoffSubjectGrade && (
                   <div className="animate-fade-in space-y-4 pt-2 border-t border-gray-100">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div><label className="block text-xs font-black text-gray-500 mb-1 ml-1">A / B</label><input type="number" step="0.01" value={cutoffScores.ab} onChange={e=>setCutoffScores({...cutoffScores, ab: e.target.value})} className="w-full p-3 bg-rose-50 border-2 border-rose-100 rounded-xl text-center font-bold focus:border-rose-500 outline-none" placeholder="예: 81.61"/></div>
-                      <div><label className="block text-xs font-black text-gray-500 mb-1 ml-1">B / C</label><input type="number" step="0.01" value={cutoffScores.bc} onChange={e=>setCutoffScores({...cutoffScores, bc: e.target.value})} className="w-full p-3 bg-rose-50 border-2 border-rose-100 rounded-xl text-center font-bold focus:border-rose-500 outline-none" placeholder="예: 66.61"/></div>
-                      <div><label className="block text-xs font-black text-gray-500 mb-1 ml-1">C / D</label><input type="number" step="0.01" value={cutoffScores.cd} onChange={e=>setCutoffScores({...cutoffScores, cd: e.target.value})} className="w-full p-3 bg-rose-50 border-2 border-rose-100 rounded-xl text-center font-bold focus:border-rose-500 outline-none" placeholder="예: 51.61"/></div>
-                      <div><label className="block text-xs font-black text-gray-500 mb-1 ml-1">D / E</label><input type="number" step="0.01" value={cutoffScores.de} onChange={e=>setCutoffScores({...cutoffScores, de: e.target.value})} className="w-full p-3 bg-rose-50 border-2 border-rose-100 rounded-xl text-center font-bold focus:border-rose-500 outline-none" placeholder="예: 36.61"/></div>
-                      <div className="col-span-2"><label className="block text-xs font-black text-gray-500 mb-1 ml-1">E / I (또는 미만)</label><input type="number" step="0.01" value={cutoffScores.ei} onChange={e=>setCutoffScores({...cutoffScores, ei: e.target.value})} className="w-full p-3 bg-rose-50 border-2 border-rose-100 rounded-xl text-center font-bold focus:border-rose-500 outline-none" placeholder="예: 19.95"/></div>
+                    
+                    {/* 💡 학기말고사일 때는 복합 표를 렌더링, 그 외에는 1줄짜리 렌더링 */}
+                    {localCutoffExam === '학기말고사' ? (
+                      <div className="w-full overflow-x-auto mt-4">
+                        <table className="w-full border-collapse border border-gray-300 text-center text-[12px] bg-white shadow-sm rounded-xl overflow-hidden">
+                          <thead>
+                            <tr className="bg-amber-100 text-amber-900">
+                              <th rowSpan={2} className="border border-gray-300 p-2 whitespace-nowrap">학년</th>
+                              <th rowSpan={2} className="border border-gray-300 p-2 min-w-[80px]">과목</th>
+                              <th rowSpan={2} className="border border-gray-300 p-2 whitespace-nowrap">정기시험/<br/>수행평가</th>
+                              <th rowSpan={2} className="border border-gray-300 p-2 whitespace-nowrap">반영비율</th>
+                              <th rowSpan={2} className="border border-gray-300 p-2 whitespace-nowrap">고사/영역</th>
+                              <th colSpan={5} className="border border-gray-300 p-2">성취수준별 추정분할점수 (단위: 점)</th>
+                            </tr>
+                            <tr className="bg-amber-100 text-amber-900">
+                              <th className="border border-gray-300 p-1 font-bold">A/B</th>
+                              <th className="border border-gray-300 p-1 font-bold">B/C</th>
+                              <th className="border border-gray-300 p-1 font-bold">C/D</th>
+                              <th className="border border-gray-300 p-1 font-bold">D/E</th>
+                              <th className="border border-gray-300 p-1 font-bold">E/미도달</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {/* 1차 정기 */}
+                            <tr>
+                              <td rowSpan={4} className="border border-gray-300 font-bold bg-gray-50 align-middle text-sm">{cutoffSubjectGrade.split('|')[0] || '-'}</td>
+                              <td rowSpan={4} className="border border-gray-300 font-bold bg-gray-50 align-middle text-sm">{cutoffSubjectGrade.split('|')[1] || '-'}</td>
+                              <td rowSpan={2} className="border border-gray-300 bg-white align-middle font-medium text-gray-700">정기시험</td>
+                              <td className="border border-gray-300 p-1.5 bg-white"><input type="number" step="0.01" value={cutoffScores.ratio1} onChange={e=>setCutoffScores({...cutoffScores, ratio1: e.target.value})} className="w-14 text-center font-bold outline-none bg-gray-50 focus:bg-amber-50 rounded px-1 py-0.5 border border-transparent focus:border-amber-300" /></td>
+                              <td className="border border-gray-300 bg-white whitespace-nowrap font-medium text-gray-700">1차 정기</td>
+                              <td className="border border-gray-300 p-1.5 bg-white"><input type="number" step="0.01" value={cutoffScores.ab1} onChange={e=>setCutoffScores({...cutoffScores, ab1: e.target.value})} className="w-14 text-center font-bold outline-none bg-gray-50 focus:bg-amber-50 rounded px-1 py-0.5 border border-transparent focus:border-amber-300" /></td>
+                              <td className="border border-gray-300 p-1.5 bg-white"><input type="number" step="0.01" value={cutoffScores.bc1} onChange={e=>setCutoffScores({...cutoffScores, bc1: e.target.value})} className="w-14 text-center font-bold outline-none bg-gray-50 focus:bg-amber-50 rounded px-1 py-0.5 border border-transparent focus:border-amber-300" /></td>
+                              <td className="border border-gray-300 p-1.5 bg-white"><input type="number" step="0.01" value={cutoffScores.cd1} onChange={e=>setCutoffScores({...cutoffScores, cd1: e.target.value})} className="w-14 text-center font-bold outline-none bg-gray-50 focus:bg-amber-50 rounded px-1 py-0.5 border border-transparent focus:border-amber-300" /></td>
+                              <td className="border border-gray-300 p-1.5 bg-white"><input type="number" step="0.01" value={cutoffScores.de1} onChange={e=>setCutoffScores({...cutoffScores, de1: e.target.value})} className="w-14 text-center font-bold outline-none bg-gray-50 focus:bg-amber-50 rounded px-1 py-0.5 border border-transparent focus:border-amber-300" /></td>
+                              <td className="border border-gray-300 p-1.5 bg-white"><input type="number" step="0.01" value={cutoffScores.ei1} onChange={e=>setCutoffScores({...cutoffScores, ei1: e.target.value})} className="w-14 text-center font-bold outline-none bg-gray-50 focus:bg-amber-50 rounded px-1 py-0.5 border border-transparent focus:border-amber-300" /></td>
+                            </tr>
+                            {/* 2차 정기 */}
+                            <tr>
+                              <td className="border border-gray-300 p-1.5 bg-white"><input type="number" step="0.01" value={cutoffScores.ratio2} onChange={e=>setCutoffScores({...cutoffScores, ratio2: e.target.value})} className="w-14 text-center font-bold outline-none bg-gray-50 focus:bg-amber-50 rounded px-1 py-0.5 border border-transparent focus:border-amber-300" /></td>
+                              <td className="border border-gray-300 bg-white whitespace-nowrap font-medium text-gray-700">2차 정기</td>
+                              <td className="border border-gray-300 p-1.5 bg-white"><input type="number" step="0.01" value={cutoffScores.ab2} onChange={e=>setCutoffScores({...cutoffScores, ab2: e.target.value})} className="w-14 text-center font-bold outline-none bg-gray-50 focus:bg-amber-50 rounded px-1 py-0.5 border border-transparent focus:border-amber-300" /></td>
+                              <td className="border border-gray-300 p-1.5 bg-white"><input type="number" step="0.01" value={cutoffScores.bc2} onChange={e=>setCutoffScores({...cutoffScores, bc2: e.target.value})} className="w-14 text-center font-bold outline-none bg-gray-50 focus:bg-amber-50 rounded px-1 py-0.5 border border-transparent focus:border-amber-300" /></td>
+                              <td className="border border-gray-300 p-1.5 bg-white"><input type="number" step="0.01" value={cutoffScores.cd2} onChange={e=>setCutoffScores({...cutoffScores, cd2: e.target.value})} className="w-14 text-center font-bold outline-none bg-gray-50 focus:bg-amber-50 rounded px-1 py-0.5 border border-transparent focus:border-amber-300" /></td>
+                              <td className="border border-gray-300 p-1.5 bg-white"><input type="number" step="0.01" value={cutoffScores.de2} onChange={e=>setCutoffScores({...cutoffScores, de2: e.target.value})} className="w-14 text-center font-bold outline-none bg-gray-50 focus:bg-amber-50 rounded px-1 py-0.5 border border-transparent focus:border-amber-300" /></td>
+                              <td className="border border-gray-300 p-1.5 bg-white"><input type="number" step="0.01" value={cutoffScores.ei2} onChange={e=>setCutoffScores({...cutoffScores, ei2: e.target.value})} className="w-14 text-center font-bold outline-none bg-gray-50 focus:bg-amber-50 rounded px-1 py-0.5 border border-transparent focus:border-amber-300" /></td>
+                            </tr>
+                            {/* 수행평가 */}
+                            <tr>
+                              <td className="border border-gray-300 bg-white font-medium text-gray-700">수행평가</td>
+                              <td className="border border-gray-300 p-1.5 bg-white"><input type="number" step="0.01" value={cutoffScores.ratioP} onChange={e=>setCutoffScores({...cutoffScores, ratioP: e.target.value})} className="w-14 text-center font-bold outline-none bg-gray-50 focus:bg-amber-50 rounded px-1 py-0.5 border border-transparent focus:border-amber-300" /></td>
+                              <td className="border border-gray-300 bg-white whitespace-nowrap font-medium text-gray-700">[전체영역]</td>
+                              <td className="border border-gray-300 p-1.5 bg-white"><input type="number" step="0.01" value={cutoffScores.abP} onChange={e=>setCutoffScores({...cutoffScores, abP: e.target.value})} className="w-14 text-center font-bold outline-none bg-gray-50 focus:bg-amber-50 rounded px-1 py-0.5 border border-transparent focus:border-amber-300" /></td>
+                              <td className="border border-gray-300 p-1.5 bg-white"><input type="number" step="0.01" value={cutoffScores.bcP} onChange={e=>setCutoffScores({...cutoffScores, bcP: e.target.value})} className="w-14 text-center font-bold outline-none bg-gray-50 focus:bg-amber-50 rounded px-1 py-0.5 border border-transparent focus:border-amber-300" /></td>
+                              <td className="border border-gray-300 p-1.5 bg-white"><input type="number" step="0.01" value={cutoffScores.cdP} onChange={e=>setCutoffScores({...cutoffScores, cdP: e.target.value})} className="w-14 text-center font-bold outline-none bg-gray-50 focus:bg-amber-50 rounded px-1 py-0.5 border border-transparent focus:border-amber-300" /></td>
+                              <td className="border border-gray-300 p-1.5 bg-white"><input type="number" step="0.01" value={cutoffScores.deP} onChange={e=>setCutoffScores({...cutoffScores, deP: e.target.value})} className="w-14 text-center font-bold outline-none bg-gray-50 focus:bg-amber-50 rounded px-1 py-0.5 border border-transparent focus:border-amber-300" /></td>
+                              <td className="border border-gray-300 p-1.5 bg-white"><input type="number" step="0.01" value={cutoffScores.eiP} onChange={e=>setCutoffScores({...cutoffScores, eiP: e.target.value})} className="w-14 text-center font-bold outline-none bg-gray-50 focus:bg-amber-50 rounded px-1 py-0.5 border border-transparent focus:border-amber-300" /></td>
+                            </tr>
+                            {/* 학기말 최종 */}
+                            <tr className="bg-amber-50 font-black">
+                              <td colSpan={3} className="border border-gray-300 p-3 align-middle text-amber-900">학기말 최종 추정분할 점수</td>
+                              <td className="border border-gray-300 p-2"><input type="number" step="0.01" value={cutoffScores.ab} onChange={e=>setCutoffScores({...cutoffScores, ab: e.target.value})} className="w-16 text-center text-[15px] font-black outline-none bg-white text-rose-600 focus:bg-amber-100 rounded px-1 py-1 border border-transparent focus:border-amber-400" /></td>
+                              <td className="border border-gray-300 p-2"><input type="number" step="0.01" value={cutoffScores.bc} onChange={e=>setCutoffScores({...cutoffScores, bc: e.target.value})} className="w-16 text-center text-[15px] font-black outline-none bg-white text-rose-600 focus:bg-amber-100 rounded px-1 py-1 border border-transparent focus:border-amber-400" /></td>
+                              <td className="border border-gray-300 p-2"><input type="number" step="0.01" value={cutoffScores.cd} onChange={e=>setCutoffScores({...cutoffScores, cd: e.target.value})} className="w-16 text-center text-[15px] font-black outline-none bg-white text-rose-600 focus:bg-amber-100 rounded px-1 py-1 border border-transparent focus:border-amber-400" /></td>
+                              <td className="border border-gray-300 p-2"><input type="number" step="0.01" value={cutoffScores.de} onChange={e=>setCutoffScores({...cutoffScores, de: e.target.value})} className="w-16 text-center text-[15px] font-black outline-none bg-white text-rose-600 focus:bg-amber-100 rounded px-1 py-1 border border-transparent focus:border-amber-400" /></td>
+                              <td className="border border-gray-300 p-2"><input type="number" step="0.01" value={cutoffScores.ei} onChange={e=>setCutoffScores({...cutoffScores, ei: e.target.value})} className="w-16 text-center text-[15px] font-black outline-none bg-white text-rose-600 focus:bg-amber-100 rounded px-1 py-1 border border-transparent focus:border-amber-400" /></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div><label className="block text-xs font-black text-gray-500 mb-1 ml-1">A / B</label><input type="number" step="0.01" value={cutoffScores.ab} onChange={e=>setCutoffScores({...cutoffScores, ab: e.target.value})} className="w-full p-3 bg-rose-50 border-2 border-rose-100 rounded-xl text-center font-bold focus:border-rose-500 outline-none" placeholder="예: 81.61"/></div>
+                        <div><label className="block text-xs font-black text-gray-500 mb-1 ml-1">B / C</label><input type="number" step="0.01" value={cutoffScores.bc} onChange={e=>setCutoffScores({...cutoffScores, bc: e.target.value})} className="w-full p-3 bg-rose-50 border-2 border-rose-100 rounded-xl text-center font-bold focus:border-rose-500 outline-none" placeholder="예: 66.61"/></div>
+                        <div><label className="block text-xs font-black text-gray-500 mb-1 ml-1">C / D</label><input type="number" step="0.01" value={cutoffScores.cd} onChange={e=>setCutoffScores({...cutoffScores, cd: e.target.value})} className="w-full p-3 bg-rose-50 border-2 border-rose-100 rounded-xl text-center font-bold focus:border-rose-500 outline-none" placeholder="예: 51.61"/></div>
+                        <div><label className="block text-xs font-black text-gray-500 mb-1 ml-1">D / E</label><input type="number" step="0.01" value={cutoffScores.de} onChange={e=>setCutoffScores({...cutoffScores, de: e.target.value})} className="w-full p-3 bg-rose-50 border-2 border-rose-100 rounded-xl text-center font-bold focus:border-rose-500 outline-none" placeholder="예: 36.61"/></div>
+                        <div className="col-span-2"><label className="block text-xs font-black text-gray-500 mb-1 ml-1">E / I (또는 미만)</label><input type="number" step="0.01" value={cutoffScores.ei} onChange={e=>setCutoffScores({...cutoffScores, ei: e.target.value})} className="w-full p-3 bg-rose-50 border-2 border-rose-100 rounded-xl text-center font-bold focus:border-rose-500 outline-none" placeholder="예: 19.95"/></div>
+                      </div>
+                    )}
+                    
+                    <div className="mt-6 flex flex-col sm:flex-row gap-3">
+                      <div className="flex-1"><label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1 mt-2">Teacher (성함)</label><input type="text" value={cutoffTeacher} onChange={e=>setCutoffTeacher(e.target.value)} className="w-full p-3 bg-gray-50 border-2 border-gray-200 rounded-xl text-sm font-bold focus:border-rose-500 outline-none" placeholder="입력자 성함 (필수 입력)" required/></div>
+                      <button type="submit" disabled={isSaving} className={`sm:w-48 w-full py-4 mt-2 sm:mt-6 bg-gray-900 text-white rounded-xl font-black shadow-md hover:bg-black transition-all active:scale-95 flex items-center justify-center gap-2`}>
+                        {isSaving ? '저장 중...' : <><Save size={18}/> 점수 저장하기</>}
+                      </button>
                     </div>
-                    <div><label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1 mt-2">Teacher (성함)</label><input type="text" value={cutoffTeacher} onChange={e=>setCutoffTeacher(e.target.value)} className="w-full p-3 bg-gray-50 border-2 border-gray-200 rounded-xl text-sm font-bold focus:border-rose-500 outline-none" placeholder="입력자 성함 (필수 입력)" required/></div>
-                    <button type="submit" disabled={isSaving} className="w-full py-4 mt-2 bg-gray-900 text-white rounded-xl font-black shadow-md hover:bg-black transition-all active:scale-95 flex items-center justify-center gap-2">
-                      {isSaving ? '저장 중...' : <><Save size={18}/> 점수 저장하기</>}
-                    </button>
                   </div>
                 )}
               </form>
