@@ -540,6 +540,7 @@ export default function App() {
     }
   });
 
+  // 💡 학기말고사 로직 추가: 학기말고사 선택 시 1, 2차 정기고사에서 입력했던 교과들을 자동으로 불러옵니다.
   let cutoffSubjectOptions = [];
   if (vExam === '수행평가') {
     const perfKey = `${vYear}|${vSem}`;
@@ -547,6 +548,13 @@ export default function App() {
     const formUniqueMap = new Map();
     perfList.forEach(item => { if(item) formUniqueMap.set(`${item.grade || ''}|${item.subject || ''}`, { grade: item.grade, subject: item.subject }); });
     const formCutoffs = examCutoffs.filter(c => String(c.year) === vYear && String(c.semester) === vSem && String(c.examName) === '수행평가');
+    formCutoffs.forEach(c => { if(c) formUniqueMap.set(`${c.grade || ''}|${c.subject || ''}`, { grade: c.grade, subject: c.subject }); });
+    cutoffSubjectOptions = Array.from(formUniqueMap.values()).filter(Boolean).sort((a,b) => String(a?.grade || '').localeCompare(String(b?.grade || '')) || String(a?.subject || '').localeCompare(String(b?.subject || '')));
+  } else if (vExam === '학기말고사') {
+    const formUniqueMap = new Map();
+    const previousCutoffs = examCutoffs.filter(c => String(c.year) === vYear && String(c.semester) === vSem && (c.examName === '1차 정기시험' || c.examName === '2차 정기시험'));
+    previousCutoffs.forEach(c => { if(c) formUniqueMap.set(`${c.grade || ''}|${c.subject || ''}`, { grade: c.grade, subject: c.subject }); });
+    const formCutoffs = examCutoffs.filter(c => String(c.year) === vYear && String(c.semester) === vSem && String(c.examName) === '학기말고사');
     formCutoffs.forEach(c => { if(c) formUniqueMap.set(`${c.grade || ''}|${c.subject || ''}`, { grade: c.grade, subject: c.subject }); });
     cutoffSubjectOptions = Array.from(formUniqueMap.values()).filter(Boolean).sort((a,b) => String(a?.grade || '').localeCompare(String(b?.grade || '')) || String(a?.subject || '').localeCompare(String(b?.subject || '')));
   } else {
@@ -759,6 +767,15 @@ export default function App() {
       const existing = prev.perfSchedules?.[key] || [];
       return { ...prev, perfSchedules: { ...(prev.perfSchedules || {}), [key]: existing.filter(item => item.id !== id) } };
     });
+  };
+
+  const togglePrintStatus = async (subjectName, isCurrentlyPrinted) => {
+    const docId = `${vYear}_${vSem}_${vExam}_${subjectName}`;
+    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'printStatuses', docId);
+    try {
+      if (isCurrentlyPrinted) await deleteDoc(docRef);
+      else await setDoc(docRef, { year: vYear, semester: vSem, examName: vExam, subjectName: subjectName, printedAt: new Date().toISOString() });
+    } catch (error) { console.error(error); }
   };
 
   const addSubject = () => {
@@ -997,15 +1014,6 @@ export default function App() {
     link.download = `평가비율표_${vRatioYear}_${vRatioSem}학기.csv`; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
   };
 
-  const togglePrintStatus = async (subjectName, isCurrentlyPrinted) => {
-    const docId = `${vYear}_${vSem}_${vExam}_${subjectName}`;
-    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'printStatuses', docId);
-    try {
-      if (isCurrentlyPrinted) await deleteDoc(docRef);
-      else await setDoc(docRef, { year: vYear, semester: vSem, examName: vExam, subjectName: subjectName, printedAt: new Date().toISOString() });
-    } catch (error) { console.error(error); }
-  };
-
   const renderScheduleTable = (scheduleData, scopesData, y, s, e, isPrintView = false) => {
     if (!scheduleData || scheduleData.length === 0) return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">등록된 시험 시간표가 없습니다.</div>;
     const dateSpans = {}; const gradeSpans = {};
@@ -1189,7 +1197,6 @@ export default function App() {
   };
 
   const renderInputRatioTable = () => {
-    // 💡 오류의 원인이었던 참조 에러를 해결하기 위해 함수 내부에 안전하게 데이터 구성
     const currentInputRatios = (assessmentRatios || []).filter(r => String(r?.year || '') === String(ratioYear) && String(r?.semester || '') === String(ratioSem));
     let ratiosToDisplay = [];
     if (String(ratioYear) === '2026' && String(ratioSem) === '1') {
@@ -1516,7 +1523,7 @@ export default function App() {
                 <div className="relative group">
                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1">Exam Type (고사 종류)</label>
                   <select value={localCutoffExam} onChange={e=>{setLocalCutoffExam(e.target.value); setCutoffSubjectGrade('');}} className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-base font-bold focus:border-rose-500 focus:bg-white transition-all appearance-none outline-none shadow-sm" required>
-                    <option value="1차 정기시험">1차 정기시험</option><option value="2차 정기시험">2차 정기시험</option><option value="수행평가">수행평가</option>
+                    <option value="1차 정기시험">1차 정기시험</option><option value="2차 정기시험">2차 정기시험</option><option value="수행평가">수행평가</option><option value="학기말고사">학기말고사</option>
                   </select>
                 </div>
                 <div className="relative group">
