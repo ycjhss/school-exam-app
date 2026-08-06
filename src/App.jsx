@@ -492,7 +492,6 @@ export default function App() {
   const viewingScopes = examScopes.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
   const viewingCutoffs = examCutoffs.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
 
-  // 💡 학기말고사를 위해 1, 2차, 수행 기록을 연동 및 폼 자동 채움
   useEffect(() => {
     if (!cutoffSubjectGrade) {
       setCutoffScores({ ab: '', bc: '', cd: '', de: '', ei: '', ratio1: '', ab1: '', bc1: '', cd1: '', de1: '', ei1: '', ratio2: '', ab2: '', bc2: '', cd2: '', de2: '', ei2: '', ratioP: '', abP: '', bcP: '', cdP: '', deP: '', eiP: '' });
@@ -1531,13 +1530,18 @@ export default function App() {
             </div>
           )}
 
-          {/* 평가 비율 입력 화면 */}
+          {/* 💡 평가 비율 입력 화면 (설명 문구 업데이트) */}
           {viewMode === 'ratio' && (
             <div className="w-full max-w-[1200px] bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-6 md:p-10 animate-fade-in mt-4">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-gray-100 pb-6">
                 <div className="flex flex-col gap-2">
                   <h2 className="text-2xl font-black text-gray-800 flex items-center gap-2"><ClipboardList className="text-amber-600"/> 과목별 정기시험 및 수행평가 비율</h2>
-                  <p className="text-gray-500 text-sm font-medium">비율을 입력하면 <strong>논술형(괄호 안 합)</strong>과 <strong>계(괄호 밖 합)</strong>가 자동 계산되며, 빈칸 클릭 시 바로 수정할 수 있습니다.</p>
+                  <p className="text-gray-500 text-sm font-medium mt-1 leading-relaxed">
+                    비율을 입력하면 <strong>논술형(괄호 안 합)</strong>과 <strong>계(괄호 밖 합)</strong>가 자동 계산되며, 빈칸 클릭 시 바로 수정할 수 있습니다.<br/>
+                    <span className="inline-block mt-2 px-3 py-1.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-xs font-bold shadow-sm">
+                      💡 입력 예시: 1차 정기 25%, 그중 논술형이 1.5%라면 <strong className="bg-white px-1 py-0.5 rounded text-black border border-amber-300 mx-0.5">25(1.5)</strong> 라고 입력해 주세요.
+                    </span>
+                  </p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-3">
                   <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 p-1 rounded-xl px-3">
@@ -1971,16 +1975,10 @@ export default function App() {
                     </div>
                   </div>
                   <div className="bg-rose-50/40 border border-rose-200 rounded-2xl p-4">
-                    <div className="flex items-center gap-2 mb-3"><Target size={16} className="text-rose-600"/><h4 className="font-bold text-rose-900 text-sm">추정분할 점수 기본 설정</h4></div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <input type="text" value={adminData.activeSettings?.cutoff?.year || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, cutoff: {...p.activeSettings.cutoff, year: e.target.value}}}))} className="p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-rose-500 outline-none" placeholder="연도"/>
-                      <select value={adminData.activeSettings?.cutoff?.semester || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, cutoff: {...p.activeSettings.cutoff, semester: e.target.value}}}))} className="p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-rose-500 outline-none"><option value="1">1학기</option><option value="2">2학기</option></select>
-                      <select value={adminData.activeSettings?.cutoff?.examName || '1차 정기시험'} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, cutoff: {...p.activeSettings.cutoff, examName: e.target.value}}}))} className="p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-rose-500 outline-none">
-                        <option value="1차 정기시험">1차 정기</option>
-                        <option value="2차 정기시험">2차 정기</option>
-                        <option value="수행평가">수행평가</option>
-                        <option value="학기말고사">학기말</option>
-                      </select>
+                    <div className="flex items-center gap-2 mb-3"><Target size={16} className="text-rose-600"/><h4 className="font-bold text-rose-900 text-sm">추정분할 점수 기본연도</h4></div>
+                    <div className="flex gap-2">
+                      <input type="text" value={adminData.activeSettings?.cutoff?.year || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, cutoff: {...p.activeSettings.cutoff, year: e.target.value}}}))} className="w-1/2 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-rose-500 outline-none" placeholder="연도"/>
+                      <select value={adminData.activeSettings?.cutoff?.semester || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, cutoff: {...p.activeSettings.cutoff, semester: e.target.value}}}))} className="w-1/2 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-rose-500 outline-none"><option value="1">1학기</option><option value="2">2학기</option></select>
                     </div>
                   </div>
                 </div>
