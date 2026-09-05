@@ -1,308 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { 
-  Save, CheckCircle, Trash2, Users, Check, AlertCircle, FileText, 
-  Edit2, Search, Settings, Plus, X, BarChart3, Clock, List,
-  Printer, Download, Lock, Unlock, Image as ImageIcon, History,
-  CalendarDays, Edit, Home, Target, ClipboardList
-} from 'lucide-react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, addDoc, onSnapshot, doc, serverTimestamp, setDoc, deleteDoc } from 'firebase/firestore';
 
-const firebaseConfig = {
-  apiKey: "AIzaSyCUgfIQSpk_ifhQTUlj0EMU6jrutoRMq3U",
-  authDomain: "timetablc.firebaseapp.com",
-  projectId: "timetablc",
-  storageBucket: "timetablc.firebasestorage.app",
-  messagingSenderId: "71494017661",
-  appId: "1:71494017661:web:599b1471ba4a0663328714"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = "school-exam-final-v2";
-
-const printStyles = `
-  @page { size: A4 landscape; margin: 0; }
-  @media print {
-    html, body, #root { width: 297mm !important; min-height: auto !important; margin: 0 !important; padding: 0 !important; background: #ffffff !important; overflow: visible !important; }
-    .app-root { width: 297mm !important; min-height: auto !important; height: auto !important; margin: 0 !important; padding: 0 !important; display: block !important; background: #ffffff !important; overflow: visible !important; }
-    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; text-shadow: none !important; box-shadow: none !important; }
-    .print-document-modal { position: static !important; inset: auto !important; display: block !important; width: 297mm !important; min-height: 210mm !important; height: auto !important; max-height: none !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; background: #ffffff !important; }
-    .print-document-sheet { width: 297mm !important; max-width: none !important; min-height: 210mm !important; height: auto !important; margin: 0 !important; padding: 11mm 12mm 9mm 12mm !important; box-sizing: border-box !important; border-radius: 0 !important; box-shadow: none !important; overflow: visible !important; background: #ffffff !important; }
-    .print-document-content { width: 100% !important; max-width: none !important; min-height: 190mm !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; color: #000000 !important; background: #ffffff !important; display: flex !important; flex-direction: column !important; }
-    .print-document-content h2 { margin: 0 0 6mm 0 !important; font-size: 19pt !important; line-height: 1.15 !important; letter-spacing: 0.08em !important; }
-    .print-document-content p { margin: 0 0 5mm 0 !important; font-size: 10.5pt !important; line-height: 1.45 !important; }
-    .print-document-content table { width: 100% !important; table-layout: auto !important; border-collapse: collapse !important; margin: 0 0 10mm 0 !important; page-break-inside: auto !important; break-inside: auto !important; }
-    .print-document-content thead { display: table-header-group !important; }
-    .print-document-content tr { page-break-inside: avoid !important; break-inside: avoid !important; }
-    .print-document-content th { padding: 2mm 1mm !important; font-size: 9pt !important; line-height: 1.2 !important; background: #f3f4f6 !important; border: 1px solid #000 !important; text-align: center !important;}
-    .print-document-content td { padding: 2mm 1mm !important; font-size: 9pt !important; line-height: 1.2 !important; border: 1px solid #000 !important; text-align: center !important;}
-    .print-signature-area { flex: 0 0 auto !important; min-height: 0 !important; margin-top: 2mm !important; background: #ffffff !important; display: flex !important; flex-direction: column !important; }
-    .print-status-page { width: 297mm !important; max-width: none !important; min-height: 210mm !important; margin: 0 !important; padding: 12mm !important; box-sizing: border-box !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; background: #ffffff !important; overflow: visible !important; }
-    .print-status-page table { page-break-inside: auto !important; }
-    .print-status-page tr, .print-status-page .print\\:break-inside-avoid { page-break-inside: avoid !important; break-inside: avoid !important; }
-  }
-`;
-
-const defaultChecklistData = [
-  { id: 1, type: 'category', text: '1. 시험 문제 출제 원칙' },
-  { id: 2, type: 'item1', text: '가. 교육 과정에 근거한 출제', status: 'O' },
-  { id: 3, type: 'category', text: '나. 동 교과협의회를 통한 출제 계획 수립 및 공동 출제' },
-  { id: 4, type: 'item2', text: '1) 과목별 성취 기준 성취 수준에 맞는 출제', status: 'O' },
-  { id: 5, type: 'item2', text: '2) 논술형 평가 문항 출제 시 채점기준표 작성 여부', status: 'O' },
-  { id: 6, type: 'item1', text: '다. 문항정보표 및 문항 분석 자료 작성 및 활용 여부 확인', status: 'O' },
-  { id: 7, type: 'item1', text: '라. 예상 평균 점수를 제시하고 그에 적합한 난이도의 문제 출제 확인', status: 'O' },
-  { id: 8, type: 'category', text: '마. 문항 출제 시 고려해야 할 사항' },
-  { id: 9, type: 'item2', text: '1) 시판되는 참고서 문제와의 일치 여부 확인', status: 'O' },
-  { id: 10, type: 'item2', text: '2) 인터넷 탑재 문제와의 일치 여부 확인', status: 'O' },
-  { id: 11, type: 'item2', text: '3) 과년도 출제 문제와의 일치 여부 확인', status: 'O' },
-  { id: 12, type: 'item2', text: '4) 편성된 교육과정과 일치하며, 선행 출제 여부에 대한 동교과 상호 확인', status: 'O' },
-  { id: 13, type: 'item2', text: '5) 동학과 학급 간 출제 범위 통일 및 유사 선택교과 간 난이도 조정 여부 확인', status: 'O' },
-  { id: 14, type: 'item2', text: '6) 문항 곤란도가 낮은 문항에 높은 배점(역배점) 하지 않도록 함', status: 'O' },
-  { id: 15, type: 'category', text: '2. 논술형 평가의 세부 출제 원칙' },
-  { id: 16, type: 'item1', text: '가. 단순 지식의 양, 암기 능력, 기억 능력 등을 측정하는 문항 지양', status: 'O' },
-  { id: 17, type: 'item1', text: '나. 해결된 문제의 \'질\'을 측정하는 역량검사 지향', status: 'O' },
-  { id: 18, type: 'item1', text: '다. 하위문항의 개수를 분명하게 인식하도록 출제', status: 'O' }
-];
-
-const defaultAssessment2026S1 = [
-  { grade: '1', subject: '공통국어1(4)', exam1: '30', exam2: '30', perf1: '20(20)', perf2: '20(20)', perf3: '', perf4: '', perf5: '', essay: '40', total: '100' },
-  { grade: '1', subject: '공통수학1(4)', exam1: '30(1.8)', exam2: '30(1.8)', perf1: '20(14)', perf2: '20(14)', perf3: '', perf4: '', perf5: '', essay: '31.6', total: '100' },
-  { grade: '1', subject: '공통영어1(4)', exam1: '30', exam2: '30', perf1: '30(30)', perf2: '10', perf3: '', perf4: '', perf5: '', essay: '30', total: '100' },
-  { grade: '1', subject: '통합사회1(3)', exam1: '25', exam2: '25', perf1: '20(20)', perf2: '20(20)', perf3: '10', perf4: '', perf5: '', essay: '40', total: '100' },
-  { grade: '1', subject: '한국사1(3)', exam1: '35(5.25)', exam2: '35(5.25)', perf1: '20(20)', perf2: '10', perf3: '', perf4: '', perf5: '', essay: '30.5', total: '100' },
-  { grade: '1', subject: '통합과학1(3)', exam1: '20', exam2: '20', perf1: '20(15)', perf2: '20(10)', perf3: '20(10)', perf4: '', perf5: '', essay: '35', total: '100' },
-  { grade: '1', subject: '과학탐구실험1(1)', exam1: '0', exam2: '0', perf1: '40', perf2: '30(30)', perf3: '30', perf4: '', perf5: '', essay: '30', total: '100' },
-  { grade: '1', subject: '기술·가정(3)', exam1: '0', exam2: '30', perf1: '35(35)', perf2: '20', perf3: '15', perf4: '', perf5: '', essay: '35', total: '100' },
-  { grade: '1', subject: '체육1(2)', exam1: '0', exam2: '0', perf1: '25', perf2: '25', perf3: '25', perf4: '25(25)', perf5: '', essay: '25', total: '100' },
-  { grade: '1', subject: '음악1(2)', exam1: '0', exam2: '0', perf1: '40', perf2: '40', perf3: '20', perf4: '', perf5: '', essay: '20', total: '100' },
-  { grade: '2', subject: '독서와 작문(4)', exam1: '30', exam2: '30', perf1: '20(20)', perf2: '20(20)', perf3: '', perf4: '', perf5: '', essay: '40', total: '100' },
-  { grade: '2', subject: '대수(3)', exam1: '25(5)', exam2: '25(5)', perf1: '12(0)', perf2: '28(28)', perf3: '10(10)', perf4: '', perf5: '', essay: '48', total: '100' },
-  { grade: '2', subject: '영어 I(3)', exam1: '30', exam2: '30', perf1: '30(30)', perf2: '10', perf3: '', perf4: '', perf5: '', essay: '30', total: '100' },
-  { grade: '2', subject: '생명과학 I(3)', exam1: '25', exam2: '25', perf1: '15(10)', perf2: '20(10)', perf3: '15(10)', perf4: '', perf5: '', essay: '30', total: '100' },
-  { grade: '2', subject: '스포츠생활1(3)', exam1: '0', exam2: '0', perf1: '25', perf2: '25', perf3: '25', perf4: '25(25)', perf5: '', essay: '25', total: '100' },
-  { grade: '2', subject: '미술(3)', exam1: '0', exam2: '0', perf1: '30', perf2: '30', perf3: '20', perf4: '20(20)', perf5: '', essay: '20', total: '100' },
-  { grade: '2', subject: '사회와문화(3)', exam1: '25', exam2: '25', perf1: '30(30)', perf2: '20', perf3: '', perf4: '', perf5: '', essay: '30', total: '100' },
-  { grade: '2', subject: '현대사회와 윤리(3)', exam1: '27', exam2: '28', perf1: '30(30)', perf2: '15', perf3: '', perf4: '', perf5: '', essay: '30', total: '100' },
-  { grade: '2', subject: '도시의 미래탐구(3)', exam1: '0', exam2: '40', perf1: '30(15)', perf2: '30(15)', perf3: '', perf4: '', perf5: '', essay: '30', total: '100' },
-  { grade: '2', subject: '세계사(3)', exam1: '35', exam2: '35', perf1: '20(20)', perf2: '10(10)', perf3: '', perf4: '', perf5: '', essay: '30', total: '100' },
-  { grade: '2', subject: '물리학 I(3)', exam1: '30', exam2: '30', perf1: '20(10)', perf2: '20(20)', perf3: '', perf4: '', perf5: '', essay: '30', total: '100' },
-  { grade: '2', subject: '물질과 에너지(3)', exam1: '30', exam2: '25[10]', perf1: '25(10)', perf2: '20(10)', perf3: '', perf4: '', perf5: '', essay: '30', total: '100' },
-  { grade: '2', subject: '융합과학탐구(3)', exam1: '0', exam2: '0', perf1: '35(15)', perf2: '35(15)', perf3: '30', perf4: '', perf5: '', essay: '30', total: '100' },
-  { grade: '2', subject: '수학과제탐구(3)', exam1: '0', exam2: '0', perf1: '25', perf2: '25(25)', perf3: '25', perf4: '25(25)', perf5: '', essay: '50', total: '100' },
-  { grade: '2', subject: '중국어 I(3)', exam1: '0', exam2: '50', perf1: '10', perf2: '20(20)', perf3: '20(20)', perf4: '', perf5: '', essay: '40', total: '100' },
-  { grade: '2', subject: '일본어 I(3)', exam1: '0', exam2: '30', perf1: '25(20)', perf2: '25(10)', perf3: '20', perf4: '', perf5: '', essay: '30', total: '100' },
-  { grade: '3', subject: '언어와 매체(3)', exam1: '30', exam2: '30', perf1: '15(15)', perf2: '15(15)', perf3: '10', perf4: '', perf5: '', essay: '30', total: '100' },
-  { grade: '3', subject: '심화국어(2)', exam1: '0', exam2: '0', perf1: '40', perf2: '30(30)', perf3: '30(30)', perf4: '', perf5: '', essay: '60', total: '100' },
-  { grade: '3', subject: '미적분(3)', exam1: '30(3.6)', exam2: '30(3.6)', perf1: '20(14)', perf2: '20(14)', perf3: '', perf4: '', perf5: '', essay: '35.2', total: '100' },
-  { grade: '3', subject: '기하(2)', exam1: '0', exam2: '40(4)', perf1: '30(16)', perf2: '30(16)', perf3: '', perf4: '', perf5: '', essay: '36', total: '100' },
-  { grade: '3', subject: '경제수학(3)', exam1: '0', exam2: '30', perf1: '35(20)', perf2: '35(20)', perf3: '', perf4: '', perf5: '', essay: '40', total: '100' },
-  { grade: '3', subject: '영어독해와작문(4)', exam1: '30', exam2: '30', perf1: '20(20)', perf2: '20(20)', perf3: '', perf4: '', perf5: '', essay: '40', total: '100' },
-  { grade: '3', subject: '영미문학읽기(2)', exam1: '0', exam2: '0', perf1: '40(30)', perf2: '30(30)', perf3: '30(10)', perf4: '', perf5: '', essay: '70', total: '100' },
-  { grade: '3', subject: '생명과학 II(3)', exam1: '0', exam2: '40', perf1: '25(25)', perf2: '25(20)', perf3: '10', perf4: '', perf5: '', essay: '45', total: '100' },
-  { grade: '3', subject: '화학 II(3)', exam1: '0', exam2: '30', perf1: '30(30)', perf2: '20(5)', perf3: '20', perf4: '', perf5: '', essay: '35', total: '100' },
-  { grade: '3', subject: '물리학 II(3)', exam1: '0', exam2: '30', perf1: '20', perf2: '30(30)', perf3: '20', perf4: '', perf5: '', essay: '30', total: '100' },
-  { grade: '3', subject: '생활과과학 II(3)', exam1: '0', exam2: '0', perf1: '30(10)', perf2: '35', perf3: '35(20)', perf4: '', perf5: '', essay: '30', total: '100' },
-  { grade: '3', subject: '생활과윤리(3)', exam1: '27', exam2: '28', perf1: '30(30)', perf2: '15', perf3: '', perf4: '', perf5: '', essay: '30', total: '100' },
-  { grade: '3', subject: '정치와 법(3)', exam1: '30(6)', exam2: '30(6)', perf1: '20(20)', perf2: '20', perf3: '', perf4: '', perf5: '', essay: '32', total: '100' },
-  { grade: '3', subject: '세계시민(2)', exam1: '0', exam2: '0', perf1: '0', perf2: '0', perf3: '', perf4: '', perf5: '', essay: '0', total: 'P.F교과' },
-  { grade: '3', subject: '여행지리(3)', exam1: '0', exam2: '0', perf1: '30', perf2: '30', perf3: '40(40)', perf4: '', perf5: '', essay: '40', total: '100' },
-  { grade: '3', subject: '스포츠 생활(2)', exam1: '0', exam2: '0', perf1: '25', perf2: '25', perf3: '25', perf4: '25(25)', perf5: '', essay: '25', total: '100' },
-  { grade: '3', subject: '음악감상과비평(2)', exam1: '0', exam2: '0', perf1: '40', perf2: '30', perf3: '30', perf4: '', perf5: '', essay: '30', total: '100' },
-  { grade: '3', subject: '미술창작(2)', exam1: '0', exam2: '0', perf1: '30', perf2: '30', perf3: '20', perf4: '20(20)', perf5: '', essay: '20', total: '100' },
-  { grade: '3', subject: '일본어 II(2)', exam1: '0', exam2: '0', perf1: '30', perf2: '30(30)', perf3: '30', perf4: '10', perf5: '', essay: '30', total: '100' },
-  { grade: '3', subject: '중국어 II(2)', exam1: '0', exam2: '0', perf1: '20', perf2: '20(20)', perf3: '30(20)', perf4: '30', perf5: '', essay: '50', total: '100' },
-  { grade: '3', subject: '인공지능기초(2)', exam1: '0', exam2: '0', perf1: '30(10)', perf2: '40', perf3: '30(30)', perf4: '', perf5: '', essay: '40', total: '100' },
-  { grade: '3', subject: '정보과학(2)', exam1: '0', exam2: '0', perf1: '30(10)', perf2: '40(30)', perf3: '30', perf4: '', perf5: '', essay: '40', total: '100' }
-];
-
-const formatDateTime = (isoString) => {
-  if (!isoString) return '';
-  try {
-    const date = new Date(isoString);
-    if (isNaN(date.getTime())) return '';
-    const days = ['일', '월', '화', '수', '목', '금', '토'];
-    const yy = String(date.getFullYear()).slice(2);
-    const mm = date.getMonth() + 1;
-    const dd = date.getDate();
-    const day = days[date.getDay()];
-    const hh = String(date.getHours()).padStart(2, '0');
-    const min = String(date.getMinutes()).padStart(2, '0');
-    return `${yy}. ${mm}. ${dd}. (${day}) ${hh}:${min}`;
-  } catch (e) { return ''; }
-};
-
-const getDisplayDate = (sig) => {
-  if (!sig) return '';
-  const dateObj = sig.createdAt || sig.updatedAt || sig.printedAt;
-  if (!dateObj) return '';
-  try {
-    if (typeof dateObj.toDate === 'function') return formatDateTime(dateObj.toDate().toISOString());
-    if (typeof dateObj === 'string') return formatDateTime(dateObj);
-    if (dateObj instanceof Date) return formatDateTime(dateObj.toISOString());
-  } catch(e) { return ''; }
-  return '';
-};
-
-const formatRatioOption = (opt) => {
-  const [y, s] = (opt || '').split('|');
-  return `${y}년 ${s}학기`;
-};
-
-const formatExamOption = (opt) => {
-  const [y, s, e] = (opt || '').split('|');
-  return `${y}년 ${s}학기 ${e === 'undefined' || !e ? '' : e}`;
-};
-
-const getScopeId = (vYear, vSem, vExam, item) => {
-  if (!item) return '';
-  return `${vYear}_${vSem}_${vExam}_${item.date || ''}_${item.grade || ''}_${item.period || ''}_${item.subject || ''}`.replace(/\s/g, '');
-};
-
-const SignaturePad = ({ onSave, resetTrigger }) => {
-  const canvasRef = useRef(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-
-  const initCanvas = () => {
-    const canvas = canvasRef.current;
-    if (!canvas || !canvas.parentElement) return;
-    const rect = canvas.parentElement.getBoundingClientRect();
-    if (canvas.width !== rect.width) canvas.width = rect.width;
-    if (canvas.height !== 160) canvas.height = 160;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return; 
-    ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.strokeStyle = '#000';
-  };
-
-  useEffect(() => {
-    initCanvas(); window.addEventListener('resize', initCanvas);
-    return () => window.removeEventListener('resize', initCanvas);
-  }, []);
-
-  useEffect(() => { if (resetTrigger) clearCanvas(); }, [resetTrigger]);
-
-  const getCoordinates = (e) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
-    return { x: clientX - rect.left, y: clientY - rect.top };
-  };
-
-  const startDrawing = (e) => { e.preventDefault(); setIsDrawing(true); const coords = getCoordinates(e); const ctx = canvasRef.current?.getContext('2d'); if (ctx) { ctx.beginPath(); ctx.moveTo(coords.x, coords.y); } };
-  const draw = (e) => { e.preventDefault(); if (!isDrawing) return; const coords = getCoordinates(e); const ctx = canvasRef.current?.getContext('2d'); if (ctx) { ctx.lineTo(coords.x, coords.y); ctx.stroke(); } };
-  const stopDrawing = () => { if (isDrawing) { setIsDrawing(false); if (canvasRef.current) { onSave(canvasRef.current.toDataURL()); } } };
-  const clearCanvas = () => { const canvas = canvasRef.current; if (!canvas) return; const ctx = canvas.getContext('2d'); if (ctx) { ctx.clearRect(0, 0, canvas.width, canvas.height); } onSave(null); };
-
-  return (
-    <div className="w-full animate-fade-in">
-      <div className="border-2 border-gray-200 border-dashed rounded-2xl bg-white overflow-hidden relative h-40 shadow-inner group transition-all focus-within:border-blue-400">
-        <canvas ref={canvasRef} className="w-full h-full touch-none cursor-crosshair" onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseOut={stopDrawing} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing} />
-      </div>
-      <div className="flex justify-between items-center mt-3 px-1">
-        <span className="text-xs font-bold text-blue-600 flex items-center gap-1"><Edit2 size={12}/> 정자체로 서명해 주세요</span>
-        <button onClick={clearCanvas} type="button" className="text-xs font-bold text-gray-400 hover:text-red-500 flex items-center gap-1 px-2 py-1 bg-white border border-gray-100 rounded-lg shadow-sm"><Trash2 size={12} /> 지우기</button>
-      </div>
-    </div>
-  );
-};
-
-const RatioRow = ({ item, year, sem, grade, onSave, onDelete }) => {
-  const [formData, setFormData] = useState(item);
-  const [confirmName, setConfirmName] = useState(item.confirmedBy || '');
-
-  useEffect(() => {
-    setFormData(item);
-    setConfirmName(item.confirmedBy || '');
-  }, [item.id, item.subject, item.total, item.essay, item.isConfirmed, item.confirmedBy]);
-
-  const handleChange = (field, val) => {
-    setFormData(prev => {
-      const newData = { ...prev, [field]: val };
-      if (['exam1', 'exam2', 'perf1', 'perf2', 'perf3', 'perf4', 'perf5'].includes(field)) {
-        let baseSum = 0; let essaySum = 0; let hasNumber = false;
-        ['exam1', 'exam2', 'perf1', 'perf2', 'perf3', 'perf4', 'perf5'].forEach(f => {
-          const rawVal = String(newData[f] || '').trim();
-          if (!rawVal) return;
-          const match = rawVal.match(/^([\d.]+)(?:[\(\[]([\d.]+)[\)\]])?/);
-          if (match) {
-            hasNumber = true;
-            baseSum += parseFloat(match[1]) || 0;
-            essaySum += parseFloat(match[2]) || 0;
-          }
-        });
-        if (hasNumber) {
-          newData.total = (Math.round(baseSum * 100) / 100).toString();
-          newData.essay = (Math.round(essaySum * 100) / 100).toString();
-        } else {
-          newData.total = ''; newData.essay = '';
-        }
-      }
-      return newData;
-    });
-  };
-
-  const isConfirmed = formData.isConfirmed;
-
-  return (
-    <tr className="hover:bg-gray-50 transition-colors group">
-      <td className="border border-gray-300 p-0 relative">
-        {isConfirmed ? (
-          <div className="w-full text-center p-1.5 text-[11px] font-bold text-gray-700 bg-gray-50">{String(formData.subject || '')}</div>
-        ) : (
-          <input type="text" value={String(formData.subject || '')} onChange={e=>handleChange('subject', e.target.value)} className="w-full text-center p-1.5 text-[11px] outline-none focus:bg-amber-50 font-bold bg-transparent" placeholder="과목명(학점)"/>
-        )}
-      </td>
-      <td className="border border-gray-300 p-0">
-        {isConfirmed ? <div className="w-full text-center p-1.5 text-[11px] text-gray-600 bg-gray-50">{String(formData.exam1 || '')}</div> : <input type="text" value={String(formData.exam1 || '')} onChange={e=>handleChange('exam1', e.target.value)} className="w-full text-center p-1.5 text-[11px] outline-none focus:bg-amber-50 bg-transparent"/>}
-      </td>
-      <td className="border border-gray-300 p-0">
-        {isConfirmed ? <div className="w-full text-center p-1.5 text-[11px] text-gray-600 bg-gray-50">{String(formData.exam2 || '')}</div> : <input type="text" value={String(formData.exam2 || '')} onChange={e=>handleChange('exam2', e.target.value)} className="w-full text-center p-1.5 text-[11px] outline-none focus:bg-amber-50 bg-transparent"/>}
-      </td>
-      <td className="border border-gray-300 p-0">
-        {isConfirmed ? <div className="w-full text-center p-1.5 text-[11px] text-gray-600 bg-gray-50">{String(formData.perf1 || '')}</div> : <input type="text" value={String(formData.perf1 || '')} onChange={e=>handleChange('perf1', e.target.value)} className="w-full text-center p-1.5 text-[11px] outline-none focus:bg-amber-50 bg-transparent"/>}
-      </td>
-      <td className="border border-gray-300 p-0">
-        {isConfirmed ? <div className="w-full text-center p-1.5 text-[11px] text-gray-600 bg-gray-50">{String(formData.perf2 || '')}</div> : <input type="text" value={String(formData.perf2 || '')} onChange={e=>handleChange('perf2', e.target.value)} className="w-full text-center p-1.5 text-[11px] outline-none focus:bg-amber-50 bg-transparent"/>}
-      </td>
-      <td className="border border-gray-300 p-0">
-        {isConfirmed ? <div className="w-full text-center p-1.5 text-[11px] text-gray-600 bg-gray-50">{String(formData.perf3 || '')}</div> : <input type="text" value={String(formData.perf3 || '')} onChange={e=>handleChange('perf3', e.target.value)} className="w-full text-center p-1.5 text-[11px] outline-none focus:bg-amber-50 bg-transparent"/>}
-      </td>
-      <td className="border border-gray-300 p-0">
-        {isConfirmed ? <div className="w-full text-center p-1.5 text-[11px] text-gray-600 bg-gray-50">{String(formData.perf4 || '')}</div> : <input type="text" value={String(formData.perf4 || '')} onChange={e=>handleChange('perf4', e.target.value)} className="w-full text-center p-1.5 text-[11px] outline-none focus:bg-amber-50 bg-transparent"/>}
-      </td>
-      <td className="border border-gray-300 p-0">
-        {isConfirmed ? <div className="w-full text-center p-1.5 text-[11px] text-gray-600 bg-gray-50">{String(formData.perf5 || '')}</div> : <input type="text" value={String(formData.perf5 || '')} onChange={e=>handleChange('perf5', e.target.value)} className="w-full text-center p-1.5 text-[11px] outline-none focus:bg-amber-50 bg-transparent"/>}
-      </td>
-      <td className="border border-gray-300 p-0 bg-amber-50/50">
-        {isConfirmed ? <div className="w-full text-center p-1.5 text-[11px] font-bold text-amber-900 bg-gray-50">{String(formData.essay || '')}</div> : <input type="text" value={String(formData.essay || '')} onChange={e=>handleChange('essay', e.target.value)} className="w-full text-center p-1.5 text-[11px] font-bold text-amber-900 outline-none bg-transparent" title="자동계산 영역 (수동수정 가능)"/>}
-      </td>
-      <td className="border border-gray-300 p-0 bg-blue-50/50">
-        {isConfirmed ? <div className="w-full text-center p-1.5 text-[11px] font-bold text-blue-900 bg-gray-50">{String(formData.total || '')}</div> : <input type="text" value={String(formData.total || '')} onChange={e=>handleChange('total', e.target.value)} className="w-full text-center p-1.5 text-[11px] font-bold text-blue-900 outline-none bg-transparent" placeholder="100"/>}
-      </td>
-      <td className="border border-gray-300 p-1 align-middle">
-        {isConfirmed ? (
-          <button onClick={() => onSave(formData, false, '', true)} className="w-full text-[10px] font-black text-emerald-600 flex items-center justify-center gap-1 bg-emerald-50 rounded hover:bg-emerald-100 py-1" title="클릭 시 확인 취소">
-            <CheckCircle size={12}/> {String(formData.confirmedBy || '')}
-          </button>
-        ) : (
-          <div className="flex flex-col gap-1 items-center px-1">
-            <input type="text" value={confirmName} onChange={e=>setConfirmName(e.target.value)} placeholder="성함" className="w-full text-[10px] p-1 border border-gray-300 rounded text-center outline-none focus:border-amber-500"/>
-            <button onClick={() => onSave(formData, true, confirmName, false)} className="w-full bg-gray-800 text-white text-[10px] py-1 rounded hover:bg-black font-bold flex items-center justify-center gap-1">
-              <Check size={10}/> 확인
-            </button>
-          </div>
-        )}
-      </td>
-      <td className="border border-gray-300 p-1 align-middle opacity-0 group-hover:opacity-100 transition-opacity">
-        <div className="flex justify-center gap-1">
-          {!isConfirmed && <button onClick={() => onSave(formData, false, '', false)} className="text-white bg-blue-500 hover:bg-blue-600 p-1.5 rounded shadow-sm" title="저장"><Save size={12}/></button>}
-          {!isConfirmed && <button onClick={() => onDelete(item.id)} className="text-white bg-red-500 hover:bg-red-600 p-1.5 rounded shadow-sm" title="삭제"><Trash2 size={12}/></button>}
-        </div>
-      </td>
     </tr>
   );
 };
@@ -371,6 +67,7 @@ export default function App() {
   const [ratioYear, setRatioYear] = useState('2026');
   const [ratioSem, setRatioSem] = useState('1');
   const [newRatioRows, setNewRatioRows] = useState([]);
+  const [ratioBulkInput, setRatioBulkInput] = useState(''); // 💡 비율 일괄 등록용 상태 추가
 
   const [adminData, setAdminData] = useState(defaultGlobalSettings);
   const [newSubject, setNewSubject] = useState('');
@@ -814,13 +511,73 @@ export default function App() {
     });
   };
 
-  const togglePrintStatus = async (subjectName, isCurrentlyPrinted) => {
-    const docId = `${vYear}_${vSem}_${vExam}_${subjectName}`;
-    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'printStatuses', docId);
+  // 💡 [비율 엑셀 데이터 일괄 붙여넣기] 핸들러 추가
+  const handleRatioBulkPaste = async () => {
+    if(!ratioBulkInput.trim()) return;
+    const lines = ratioBulkInput.split('\n');
+    setIsSaving(true);
     try {
-      if (isCurrentlyPrinted) await deleteDoc(docRef);
-      else await setDoc(docRef, { year: vYear, semester: vSem, examName: vExam, subjectName: subjectName, printedAt: new Date().toISOString() });
-    } catch (error) { console.error(error); }
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const parts = line.split('\t').map(p => p.trim());
+        if (parts.length < 2) continue; // 최소한 학년, 과목은 있어야 함
+
+        const grade = parts[0];
+        const subject = parts[1];
+        const exam1 = parts[2] || '';
+        const exam2 = parts[3] || '';
+        const perf1 = parts[4] || '';
+        const perf2 = parts[5] || '';
+        const perf3 = parts[6] || '';
+        const perf4 = parts[7] || '';
+        const perf5 = parts[8] || '';
+
+        // 논술형 및 총합 자동 계산
+        let baseSum = 0; let essaySum = 0; let hasNumber = false;
+        [exam1, exam2, perf1, perf2, perf3, perf4, perf5].forEach(val => {
+          if (!val) return;
+          const match = val.match(/^([\d.]+)(?:[\(\[]([\d.]+)[\)\]])?/);
+          if (match) {
+            hasNumber = true;
+            baseSum += parseFloat(match[1]) || 0;
+            essaySum += parseFloat(match[2]) || 0;
+          }
+        });
+
+        let total = ''; let essay = '';
+        if (hasNumber) {
+          total = (Math.round(baseSum * 100) / 100).toString();
+          essay = (Math.round(essaySum * 100) / 100).toString();
+        }
+
+        const targetYear = adminData.activeSettings?.ratio?.year || '2026';
+        const targetSem = adminData.activeSettings?.ratio?.semester || '1';
+
+        const docId = `${targetYear}_${targetSem}_${grade}_${subject}`.replace(/\s/g, '');
+        
+        const finalData = {
+          year: targetYear,
+          semester: targetSem,
+          grade,
+          subject,
+          exam1, exam2, perf1, perf2, perf3, perf4, perf5,
+          total, essay,
+          isConfirmed: false,
+          confirmedBy: '',
+          updatedAt: serverTimestamp()
+        };
+
+        // Firestore에 데이터 덮어쓰기 저장
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'assessmentRatios', docId), finalData);
+      }
+      setRatioBulkInput('');
+      setAdminMessage({ type: 'success', text: '비율 데이터가 성공적으로 덮어쓰기 되었습니다.' });
+      setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000);
+    } catch (err) {
+      setAdminMessage({ type: 'error', text: '비율 데이터 저장 중 오류가 발생했습니다.' });
+      setTimeout(() => setAdminMessage({ type: '', text: '' }), 4000);
+    }
+    setIsSaving(false);
   };
 
   const addSubject = () => {
@@ -1551,7 +1308,6 @@ export default function App() {
                       <option value="2">2학기</option>
                     </select>
                   </div>
-                  {/* 💡 비율 입력 탭 전용 엑셀 다운로드 버튼 추가 */}
                   <button onClick={handleExportRatioCSV} className="bg-amber-50 text-amber-700 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold hover:bg-amber-100 border border-amber-200 transition-colors shadow-sm whitespace-nowrap print:hidden">
                     <Download size={16} /> 엑셀(CSV) 다운로드
                   </button>
@@ -1638,7 +1394,7 @@ export default function App() {
                         <div className="animate-fade-in space-y-3 pt-2">
                           <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2">Signature</label>
                           <SignaturePad onSave={setSignatureData} resetTrigger={resetSigCounter} />
-                          <button type="submit" disabled={isSaving || !signatureData} className="w-full py-5 bg-gray-900 text-white rounded-[1.5rem] font-black text-lg shadow-xl shadow-gray-200 hover:bg-black transition-all active:scale-95 disabled:bg-gray-300 flex items-center justify-center gap-2 mt-4">
+                          <button type="submit" disabled={isSaving} className="w-full py-5 bg-gray-900 text-white rounded-[1.5rem] font-black text-lg shadow-xl shadow-gray-200 hover:bg-black transition-all active:scale-95 disabled:bg-gray-300 flex items-center justify-center gap-2 mt-4">
                             {isSaving ? '보존 중...' : <><Save size={20}/> 확인 및 제출</>}
                           </button>
                           {submitError && <p className="text-red-500 text-xs font-bold text-center mt-2">{String(submitError)}</p>}
@@ -1978,11 +1734,35 @@ export default function App() {
                     </div>
                   </div>
                   <div className="bg-rose-50/40 border border-rose-200 rounded-2xl p-4">
-                    <div className="flex items-center gap-2 mb-3"><Target size={16} className="text-rose-600"/><h4 className="font-bold text-rose-900 text-sm">추정분할 점수 기본연도</h4></div>
-                    <div className="flex gap-2">
-                      <input type="text" value={adminData.activeSettings?.cutoff?.year || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, cutoff: {...p.activeSettings.cutoff, year: e.target.value}}}))} className="w-1/2 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-rose-500 outline-none" placeholder="연도"/>
-                      <select value={adminData.activeSettings?.cutoff?.semester || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, cutoff: {...p.activeSettings.cutoff, semester: e.target.value}}}))} className="w-1/2 p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-rose-500 outline-none"><option value="1">1학기</option><option value="2">2학기</option></select>
+                    <div className="flex items-center gap-2 mb-3"><Target size={16} className="text-rose-600"/><h4 className="font-bold text-rose-900 text-sm">추정분할 점수 기본 설정</h4></div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <input type="text" value={adminData.activeSettings?.cutoff?.year || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, cutoff: {...p.activeSettings.cutoff, year: e.target.value}}}))} className="p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-rose-500 outline-none" placeholder="연도"/>
+                      <select value={adminData.activeSettings?.cutoff?.semester || ''} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, cutoff: {...p.activeSettings.cutoff, semester: e.target.value}}}))} className="p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-rose-500 outline-none"><option value="1">1학기</option><option value="2">2학기</option></select>
+                      <select value={adminData.activeSettings?.cutoff?.examName || '1차 정기시험'} onChange={e=>setAdminData(p=>({...p, activeSettings: {...p.activeSettings, cutoff: {...p.activeSettings.cutoff, examName: e.target.value}}}))} className="p-2.5 bg-white border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-rose-500 outline-none">
+                        <option value="1차 정기시험">1차 정기</option>
+                        <option value="2차 정기시험">2차 정기</option>
+                        <option value="수행평가">수행평가</option>
+                        <option value="학기말고사">학기말</option>
+                      </select>
                     </div>
+                  </div>
+                </div>
+
+                {/* 💡 새로 추가된 비율 데이터 일괄 등록 영역 */}
+                <div className="pt-4 border-t border-gray-100">
+                  <h3 className="text-lg font-black text-gray-800 mb-2 flex items-center gap-2">
+                    <ClipboardList size={20} className="text-amber-500"/> 
+                    [{String(adminData.activeSettings?.ratio?.year || '')}년 {String(adminData.activeSettings?.ratio?.semester || '')}학기] 비율 데이터 엑셀 일괄 등록 (강제 덮어쓰기)
+                  </h3>
+                  <p className="text-xs text-amber-700 mb-4 font-bold bg-amber-50 inline-block px-3 py-1.5 rounded-lg border border-amber-100">
+                    💡 한글 파일(hwpx)의 표를 엑셀에 먼저 붙여넣은 뒤, 엑셀에서 데이터를 다시 복사하여 아래에 붙여넣어 주세요.<br/>
+                    순서: [학년] [과목] [1차] [2차] [수행1] [수행2] [수행3] [수행4] [수행5] (논술형과 계는 자동계산됩니다)
+                  </p>
+                  <div className="mb-6 p-5 bg-amber-50/50 border border-amber-100 rounded-2xl">
+                    <textarea value={ratioBulkInput} onChange={e => setRatioBulkInput(e.target.value)} className="w-full h-24 p-3 bg-white border border-amber-200 rounded-xl text-sm outline-none focus:border-amber-500 resize-none custom-scrollbar" placeholder="여기에 엑셀 데이터를 붙여넣기 하세요." />
+                    <button onClick={handleRatioBulkPaste} type="button" disabled={isSaving} className="mt-3 px-4 py-2 bg-amber-600 text-white text-xs font-bold rounded-lg hover:bg-amber-700 transition-all shadow-sm active:scale-95 disabled:bg-gray-400">
+                      {isSaving ? '저장 중...' : '비율 데이터 일괄 덮어쓰기'}
+                    </button>
                   </div>
                 </div>
 
