@@ -1530,14 +1530,13 @@ export default function App() {
             </div>
           )}
 
-          {/* 💡 평가 비율 입력 화면 (설명 문구 업데이트) */}
+          {/* 평가 비율 입력 화면 */}
           {viewMode === 'ratio' && (
             <div className="w-full max-w-[1200px] bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-6 md:p-10 animate-fade-in mt-4">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-gray-100 pb-6">
                 <div className="flex flex-col gap-2">
                   <h2 className="text-2xl font-black text-gray-800 flex items-center gap-2"><ClipboardList className="text-amber-600"/> 과목별 정기시험 및 수행평가 비율</h2>
-                  <p className="text-gray-500 text-sm font-medium mt-1 leading-relaxed">
-                    비율을 입력하면 <strong>논술형(괄호 안 합)</strong>과 <strong>계(괄호 밖 합)</strong>가 자동 계산되며, 빈칸 클릭 시 바로 수정할 수 있습니다.<br/>
+                  <p className="text-gray-500 text-sm font-medium">비율을 입력하면 <strong>논술형(괄호 안 합)</strong>과 <strong>계(괄호 밖 합)</strong>가 자동 계산되며, 빈칸 클릭 시 바로 수정할 수 있습니다.<br/>
                     <span className="inline-block mt-2 px-3 py-1.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-xs font-bold shadow-sm">
                       💡 입력 예시: 1차 정기 25%, 그중 논술형이 1.5%라면 <strong className="bg-white px-1 py-0.5 rounded text-black border border-amber-300 mx-0.5">25(1.5)</strong> 라고 입력해 주세요.
                     </span>
@@ -1552,6 +1551,10 @@ export default function App() {
                       <option value="2">2학기</option>
                     </select>
                   </div>
+                  {/* 💡 비율 입력 탭 전용 엑셀 다운로드 버튼 추가 */}
+                  <button onClick={handleExportRatioCSV} className="bg-amber-50 text-amber-700 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold hover:bg-amber-100 border border-amber-200 transition-colors shadow-sm whitespace-nowrap print:hidden">
+                    <Download size={16} /> 엑셀(CSV) 다운로드
+                  </button>
                 </div>
               </div>
 
