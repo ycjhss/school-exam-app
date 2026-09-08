@@ -371,7 +371,6 @@ export default function App() {
   const [ratioYear, setRatioYear] = useState('2026');
   const [ratioSem, setRatioSem] = useState('1');
   const [newRatioRows, setNewRatioRows] = useState([]);
-  const [ratioBulkInput, setRatioBulkInput] = useState('');
 
   const [adminData, setAdminData] = useState(defaultGlobalSettings);
   const [newSubject, setNewSubject] = useState('');
@@ -449,13 +448,10 @@ export default function App() {
     return () => { unsubSigs(); unsubPrints(); unsubScopes(); unsubCutoffs(); unsubRatios(); };
   }, [user]);
 
-  // 💡 캡스록(대문자) 입력 방지 및 자동 띄어쓰기 제거
   const handleUnlockAdmin = (e) => {
     e.preventDefault();
-    const currentPassword = String(globalSettings.adminPassword || '1234').trim();
-    const inputStr = String(pinInput).trim(); // 스마트폰 자동 띄어쓰기(공백) 완벽 제거
-    
-    // 기존 비밀번호 또는 비상용 마스터키(0000, 1234) 입력 시 통과
+    const currentPassword = String(globalSettings.adminPassword || '1234');
+    const inputStr = String(pinInput).trim();
     if (inputStr === currentPassword || inputStr === '1234' || inputStr === '0000') { 
       setIsAdminUnlocked(true); 
       setPinError(false); 
@@ -504,6 +500,7 @@ export default function App() {
   const viewingScopes = examScopes.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
   const viewingCutoffs = examCutoffs.filter(s => String(s.year) === vYear && String(s.semester) === vSem && String(s.examName) === vExam);
 
+  // 💡 학기말고사를 위해 1, 2차, 수행 기록을 연동 및 폼 자동 채움
   useEffect(() => {
     if (!cutoffSubjectGrade) {
       setCutoffScores({ ab: '', bc: '', cd: '', de: '', ei: '', ratio1: '', ab1: '', bc1: '', cd1: '', de1: '', ei1: '', ratio2: '', ab2: '', bc2: '', cd2: '', de2: '', ei2: '', ratioP: '', abP: '', bcP: '', cdP: '', deP: '', eiP: '' });
@@ -587,6 +584,7 @@ export default function App() {
     }
   });
 
+  // 💡 학기말고사 로직 추가: 학기말고사 선택 시 1, 2차 정기고사에서 입력했던 교과들을 자동으로 불러옵니다.
   let cutoffSubjectOptions = [];
   if (vExam === '수행평가') {
     const perfKey = `${vYear}|${vSem}`;
@@ -662,6 +660,7 @@ export default function App() {
     e.preventDefault();
     if (!cutoffSubjectGrade) { alert("과목을 선택해주세요."); return; }
     
+    // 학기말고사는 abF(ab) 만 필수 검사, 나머지는 ab 만 필수 검사
     const isAllEmpty = vExam === '학기말고사' 
       ? !cutoffScores.ab && !cutoffScores.bc && !cutoffScores.cd && !cutoffScores.de && !cutoffScores.ei
       : !cutoffScores.ab && !cutoffScores.bc && !cutoffScores.cd && !cutoffScores.de && !cutoffScores.ei;
@@ -1158,11 +1157,11 @@ export default function App() {
     link.download = `평가비율표_${vRatioYear}_${vRatioSem}학기.csv`; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
   };
 
-  // 💡 선택과목 분반(같은 교시 다중 과목) 겹침 파괴 방지 로직 개선
+  // 💡 표의 날짜, 학년을 계산하는 로직입니다. 교시는 제외하여 분반(동시시험)을 완벽히 지원합니다.
   const renderScheduleTable = (scheduleData, scopesData, y, s, e, isPrintView = false) => {
     if (!scheduleData || scheduleData.length === 0) return <div className="p-8 text-center text-gray-500 font-bold bg-gray-50 rounded-2xl">등록된 시험 시간표가 없습니다.</div>;
     
-    // 교시(period)는 병합 기준에서 완벽히 제외하여 같은 교시라도 절대 합쳐지지 않게 만듭니다.
+    // 💡 날짜(Date)와 학년(Grade)별로 몇 개의 줄을 합쳐야 하는지 계산합니다.
     const dateSpans = {}; 
     const gradeSpans = {};
     
@@ -1171,12 +1170,15 @@ export default function App() {
       const safeDate = String(item.date || '');
       const safeGrade = String(item.grade || '');
       
+      // 날짜별 총 개수 누적
       dateSpans[safeDate] = (dateSpans[safeDate] || 0) + 1; 
-      // 학년은 날짜가 같을 때만 병합
+      
+      // '날짜_학년' 고유 키로 학년별 총 개수 누적
       const gradeKey = `${safeDate}_${safeGrade}`; 
       gradeSpans[gradeKey] = (gradeSpans[gradeKey] || 0) + 1; 
     });
 
+    // 렌더링 중 중복 출력을 막기 위한 체크박스 세트
     const renderedDates = new Set(); 
     const renderedGrades = new Set();
 
@@ -1203,19 +1205,22 @@ export default function App() {
               const scopeDoc = (scopesData || []).find(sc => sc.id === scopeId); 
               const gradeKey = `${safeDate}_${safeGrade}`;
               
+              // 해당 날짜를 처음 그릴 때만 rowSpan 적용
               const showDate = !renderedDates.has(safeDate); 
               if (showDate) renderedDates.add(safeDate);
               
+              // 해당 학년을 처음 그릴 때만 rowSpan 적용
               const showGrade = !renderedGrades.has(gradeKey); 
               if (showGrade) renderedGrades.add(gradeKey);
               
               return (
                 <tr key={item.id || idx}>
-                  {/* 일자와 학년까지만 병합하고 교시는 절대 병합하지 않습니다. */}
                   {showDate && <td rowSpan={dateSpans[safeDate]} className="border border-black p-2 align-middle whitespace-pre-wrap">{safeDate}</td>}
                   {showGrade && <td rowSpan={gradeSpans[gradeKey]} className="border border-black p-2 align-middle font-bold">{safeGrade}</td>}
                   
+                  {/* 교시는 절대 병합하지 않고 독립적으로 출력합니다. (동시시험/분반 문제 해결) */}
                   <td className="border border-black p-2">{String(item.period || '')}</td>
+                  
                   <td className="border border-black p-2 font-bold">{String(item.subject || '')}</td>
                   <td className="border border-black p-3 text-left whitespace-pre-wrap min-w-[200px] leading-relaxed">
                     {scopeDoc ? String(scopeDoc.scopeText || '') : (isPrintView ? '' : <span className="text-gray-300 italic">미입력</span>)}
@@ -1633,11 +1638,9 @@ export default function App() {
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-gray-100 pb-6">
                 <div className="flex flex-col gap-2">
                   <h2 className="text-2xl font-black text-gray-800 flex items-center gap-2"><ClipboardList className="text-amber-600"/> 과목별 정기시험 및 수행평가 비율</h2>
-                  <p className="text-gray-500 text-sm font-medium">
-                    비율을 입력하면 <strong>논술형(괄호 안 합)</strong>과 <strong>계(괄호 밖 합)</strong>가 자동 계산되며, 빈칸 클릭 시 바로 수정할 수 있습니다.<br/>
-                    <span className="inline-block mt-2 px-3 py-1.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-xs font-bold shadow-sm">
-                      💡 입력 예시: 1차 정기 25%, 그중 논술형이 1.5%라면 <strong className="bg-white px-1 py-0.5 rounded text-black border border-amber-300 mx-0.5">25(1.5)</strong> 라고 입력해 주세요.
-                    </span>
+                  <p className="text-gray-500 text-sm font-medium">비율을 입력하면 <strong>논술형(괄호 안 합)</strong>과 <strong>계(괄호 밖 합)</strong>가 자동 계산되며, 빈칸 클릭 시 바로 수정할 수 있습니다.</p>
+                  <p className="text-rose-600 text-sm font-bold bg-rose-50 inline-block px-3 py-1 rounded-lg border border-rose-100 w-fit">
+                    💡 입력 예시: 1차 정기시험 비율이 25%이고, 그중 논술형이 1.5%라면 칸 안에 <span className="bg-white px-1.5 py-0.5 rounded border border-rose-200 shadow-sm mx-0.5 text-black">25(1.5)</span> 라고 입력해 주세요.
                   </p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-3">
@@ -1649,7 +1652,7 @@ export default function App() {
                       <option value="2">2학기</option>
                     </select>
                   </div>
-                  <button onClick={handleExportRatioCSV} className="bg-amber-50 text-amber-700 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold hover:bg-amber-100 border border-amber-200 transition-colors shadow-sm whitespace-nowrap print:hidden">
+                  <button onClick={handleExportRatioCSV} className="bg-emerald-50 text-emerald-700 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold hover:bg-emerald-100 border border-emerald-200 transition-colors shadow-sm whitespace-nowrap print:hidden">
                     <Download size={16} /> 엑셀(CSV) 다운로드
                   </button>
                 </div>
