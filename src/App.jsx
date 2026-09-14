@@ -381,6 +381,7 @@ export default function App() {
     ratioP: '', abP: '', bcP: '', cdP: '', deP: '', eiP: ''
   });
   const [cutoffTeacher, setCutoffTeacher] = useState('');
+  const [isCutoffNotConducted, setIsCutoffNotConducted] = useState(false);
 
   const [assessmentRatios, setAssessmentRatios] = useState([]);
   const [ratioYear, setRatioYear] = useState('2026');
@@ -520,12 +521,14 @@ export default function App() {
     if (!cutoffSubjectGrade) {
       setCutoffScores({ ab: '', bc: '', cd: '', de: '', ei: '', ratio1: '', ab1: '', bc1: '', cd1: '', de1: '', ei1: '', ratio2: '', ab2: '', bc2: '', cd2: '', de2: '', ei2: '', ratioP: '', abP: '', bcP: '', cdP: '', deP: '', eiP: '' });
       setCutoffTeacher('');
+      setIsCutoffNotConducted(false);
       return;
     }
 
     const [g, subjectName] = cutoffSubjectGrade.split('|');
     const docId = `${vYear}_${vSem}_${vExam}_${g}_${subjectName}`.replace(/\s/g, '');
     const existingCutoff = (examCutoffs || []).find(c => c.id === docId);
+    setIsCutoffNotConducted(Boolean(existingCutoff?.isNotConducted));
 
     if (vExam === '학기말고사') {
       const c1 = (examCutoffs || []).find(c => c.id === `${vYear}_${vSem}_1차정기시험_${g}_${subjectName}`.replace(/\s/g, ''));
@@ -680,21 +683,29 @@ export default function App() {
       ? !cutoffScores.ab && !cutoffScores.bc && !cutoffScores.cd && !cutoffScores.de && !cutoffScores.ei
       : !cutoffScores.ab && !cutoffScores.bc && !cutoffScores.cd && !cutoffScores.de && !cutoffScores.ei;
 
-    if (!isAllEmpty && !cutoffTeacher.trim()) { alert("입력자 성함을 필수적으로 입력해주세요."); return; }
+    const saveAsNotConducted = vExam === '수행평가' && isCutoffNotConducted;
+    if (!saveAsNotConducted && !isAllEmpty && !cutoffTeacher.trim()) { alert("입력자 성함을 필수적으로 입력해주세요."); return; }
 
     setIsSaving(true);
     try {
       const [g, s] = cutoffSubjectGrade.split('|');
       const docId = `${vYear}_${vSem}_${vExam}_${g}_${s}`.replace(/\s/g, '');
 
-      if (isAllEmpty) {
+      if (saveAsNotConducted) {
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examCutoffs', docId), {
+          year: vYear, semester: vSem, examName: vExam, grade: g, subject: s,
+          ab: '', bc: '', cd: '', de: '', ei: '', isNotConducted: true,
+          teacherName: cutoffTeacher.trim(), updatedAt: serverTimestamp()
+        });
+        alert("추정분할 미입력 교과로 저장되었습니다.");
+      } else if (isAllEmpty) {
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'examCutoffs', docId));
         alert("입력된 점수가 없어 기존 기록이 완전히 삭제(초기화)되었습니다.");
       } else {
         const dataToSave = {
           year: vYear, semester: vSem, examName: vExam, grade: g, subject: s,
           ab: cutoffScores.ab, bc: cutoffScores.bc, cd: cutoffScores.cd, de: cutoffScores.de, ei: cutoffScores.ei,
-          teacherName: cutoffTeacher.trim(), updatedAt: serverTimestamp()
+          isNotConducted: false, teacherName: cutoffTeacher.trim(), updatedAt: serverTimestamp()
         };
         
         if (vExam === '학기말고사') {
@@ -1367,11 +1378,17 @@ export default function App() {
             {submittedCutoffs.map((item, idx) => (
               <tr key={idx}>
                 <td className="border border-black p-2 font-bold whitespace-nowrap">{String(item.subject || '')}({String(item.grade || '')})</td>
-                <td className="border border-black p-2 font-medium text-gray-800">{String(item.ab || '')}</td>
-                <td className="border border-black p-2 font-medium text-gray-800">{String(item.bc || '')}</td>
-                <td className="border border-black p-2 font-medium text-gray-800">{String(item.cd || '')}</td>
-                <td className="border border-black p-2 font-medium text-gray-800">{String(item.de || '')}</td>
-                <td className="border border-black p-2 font-medium text-gray-800">{String(item.ei || '')}</td>
+                {item.isNotConducted ? (
+                  <td colSpan={5} className="border border-black p-2 font-bold text-gray-500 bg-gray-50">추정분할 미입력</td>
+                ) : (
+                  <>
+                    <td className="border border-black p-2 font-medium text-gray-800">{String(item.ab || '')}</td>
+                    <td className="border border-black p-2 font-medium text-gray-800">{String(item.bc || '')}</td>
+                    <td className="border border-black p-2 font-medium text-gray-800">{String(item.cd || '')}</td>
+                    <td className="border border-black p-2 font-medium text-gray-800">{String(item.de || '')}</td>
+                    <td className="border border-black p-2 font-medium text-gray-800">{String(item.ei || '')}</td>
+                  </>
+                )}
                 {!isPrintView && (
                   <td className="border border-black p-2 text-[10px] text-gray-500 leading-tight print:hidden">
                     {String(item.teacherName || '-')}<br/>({getDisplayDate(item)})
@@ -1818,9 +1835,32 @@ export default function App() {
                 
                 {cutoffSubjectGrade && (
                   <div className="animate-fade-in space-y-4 pt-2 border-t border-gray-100">
+                    {localCutoffExam === '수행평가' && (
+                      <label className="flex items-start gap-3 p-4 bg-rose-50 border border-rose-200 rounded-2xl cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={isCutoffNotConducted}
+                          onChange={e => {
+                            const checked = e.target.checked;
+                            setIsCutoffNotConducted(checked);
+                            if (checked) setCutoffScores(prev => ({ ...prev, ab: '', bc: '', cd: '', de: '', ei: '' }));
+                          }}
+                          className="mt-0.5 w-4 h-4 accent-rose-600"
+                        />
+                        <span>
+                          <span className="block text-sm font-black text-rose-800">이 과목은 수행평가 추정분할을 입력하지 않음</span>
+                          <span className="block text-xs text-rose-600 mt-1">체크 후 저장하면 점수 없이 ‘미입력’ 상태로 보관됩니다.</span>
+                        </span>
+                      </label>
+                    )}
                     
                     {/* 💡 학기말고사일 때는 복합 표를 렌더링, 그 외에는 1줄짜리 렌더링 */}
-                    {localCutoffExam === '학기말고사' ? (
+                    {isCutoffNotConducted ? (
+                      <div className="p-8 text-center bg-gray-50 border border-dashed border-gray-300 rounded-2xl text-gray-500 font-bold">
+                        수행평가 추정분할 점수는 입력하지 않습니다.<br/>
+                        <span className="text-xs font-medium text-gray-400">아래 버튼을 눌러 미입력 상태를 저장해 주세요.</span>
+                      </div>
+                    ) : localCutoffExam === '학기말고사' ? (
                       <div className="w-full overflow-x-auto mt-4">
                         <table className="w-full border-collapse border border-gray-300 text-center text-[12px] bg-white shadow-sm rounded-xl overflow-hidden">
                           <thead>
@@ -1898,9 +1938,9 @@ export default function App() {
                     )}
                     
                     <div className="mt-6 flex flex-col sm:flex-row gap-3">
-                      <div className="flex-1"><label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1 mt-2">Teacher (성함)</label><input type="text" value={cutoffTeacher} onChange={e=>setCutoffTeacher(e.target.value)} className="w-full p-3 bg-gray-50 border-2 border-gray-200 rounded-xl text-sm font-bold focus:border-rose-500 outline-none" placeholder="입력자 성함 (필수 입력)" required/></div>
+                      <div className="flex-1"><label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2 mb-1 mt-2">Teacher (성함)</label><input type="text" value={cutoffTeacher} onChange={e=>setCutoffTeacher(e.target.value)} className="w-full p-3 bg-gray-50 border-2 border-gray-200 rounded-xl text-sm font-bold focus:border-rose-500 outline-none" placeholder={isCutoffNotConducted ? "입력자 성함 (선택)" : "입력자 성함 (필수 입력)"} required={!isCutoffNotConducted}/></div>
                       <button type="submit" disabled={isSaving} className={`sm:w-48 w-full py-4 mt-2 sm:mt-6 bg-gray-900 text-white rounded-xl font-black shadow-md hover:bg-black transition-all active:scale-95 flex items-center justify-center gap-2`}>
-                        {isSaving ? '저장 중...' : <><Save size={18}/> 점수 저장하기</>}
+                        {isSaving ? '저장 중...' : <><Save size={18}/> {isCutoffNotConducted ? '미입력으로 저장' : '점수 저장하기'}</>}
                       </button>
                     </div>
                   </div>
