@@ -24,23 +24,23 @@ const db = getFirestore(app);
 const appId = "school-exam-final-v2";
 
 const printStyles = `
-  @page { size: A4 landscape; margin: 0; }
+  @page { size: A4 portrait; margin: 0; }
   @media print {
-    html, body, #root { width: 297mm !important; min-height: auto !important; margin: 0 !important; padding: 0 !important; background: #ffffff !important; overflow: visible !important; }
-    .app-root { width: 297mm !important; min-height: auto !important; height: auto !important; margin: 0 !important; padding: 0 !important; display: block !important; background: #ffffff !important; overflow: visible !important; }
+    html, body, #root { width: 210mm !important; min-height: auto !important; margin: 0 !important; padding: 0 !important; background: #ffffff !important; overflow: visible !important; }
+    .app-root { width: 210mm !important; min-height: auto !important; height: auto !important; margin: 0 !important; padding: 0 !important; display: block !important; background: #ffffff !important; overflow: visible !important; }
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; text-shadow: none !important; box-shadow: none !important; }
-    .print-document-modal { position: static !important; inset: auto !important; display: block !important; width: 297mm !important; min-height: 210mm !important; height: auto !important; max-height: none !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; background: #ffffff !important; }
-    .print-document-sheet { width: 297mm !important; max-width: none !important; min-height: 210mm !important; height: auto !important; margin: 0 !important; padding: 11mm 12mm 9mm 12mm !important; box-sizing: border-box !important; border-radius: 0 !important; box-shadow: none !important; overflow: visible !important; background: #ffffff !important; }
-    .print-document-content { width: 100% !important; max-width: none !important; min-height: 190mm !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; color: #000000 !important; background: #ffffff !important; display: flex !important; flex-direction: column !important; }
-    .print-document-content h2 { margin: 0 0 6mm 0 !important; font-size: 19pt !important; line-height: 1.15 !important; letter-spacing: 0.08em !important; }
-    .print-document-content p { margin: 0 0 5mm 0 !important; font-size: 10.5pt !important; line-height: 1.45 !important; }
-    .print-document-content table { width: 100% !important; table-layout: auto !important; border-collapse: collapse !important; margin: 0 0 10mm 0 !important; page-break-inside: auto !important; break-inside: auto !important; }
+    .print-document-modal { position: static !important; inset: auto !important; display: block !important; width: 210mm !important; min-height: 297mm !important; height: auto !important; max-height: none !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; background: #ffffff !important; }
+    .print-document-sheet { width: 210mm !important; max-width: none !important; min-height: 297mm !important; height: auto !important; margin: 0 auto !important; padding: 15mm 12mm 10mm 12mm !important; box-sizing: border-box !important; border-radius: 0 !important; box-shadow: none !important; overflow: hidden !important; background: #ffffff !important; }
+    .print-document-content { width: 100% !important; max-width: none !important; min-height: 260mm !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; color: #000000 !important; background: #ffffff !important; display: flex !important; flex-direction: column !important; }
+    .print-document-content h2 { margin: 0 0 5mm 0 !important; font-size: 16pt !important; line-height: 1.15 !important; letter-spacing: 0.05em !important; }
+    .print-document-content p { margin: 0 0 3mm 0 !important; font-size: 10pt !important; line-height: 1.3 !important; }
+    .print-document-content table { width: 100% !important; table-layout: auto !important; border-collapse: collapse !important; margin: 0 0 6mm 0 !important; page-break-inside: avoid !important; break-inside: avoid !important; }
     .print-document-content thead { display: table-header-group !important; }
     .print-document-content tr { page-break-inside: avoid !important; break-inside: avoid !important; }
-    .print-document-content th { padding: 2mm 1mm !important; font-size: 9pt !important; line-height: 1.2 !important; background: #f3f4f6 !important; border: 1px solid #000 !important; text-align: center !important;}
-    .print-document-content td { padding: 2mm 1mm !important; font-size: 9pt !important; line-height: 1.2 !important; border: 1px solid #000 !important; text-align: center !important;}
-    .print-signature-area { flex: 0 0 auto !important; min-height: 0 !important; margin-top: 2mm !important; background: #ffffff !important; display: flex !important; flex-direction: column !important; }
-    .print-status-page { width: 297mm !important; max-width: none !important; min-height: 210mm !important; margin: 0 !important; padding: 12mm !important; box-sizing: border-box !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; background: #ffffff !important; overflow: visible !important; }
+    .print-document-content th { padding: 1.5mm 1mm !important; font-size: 8.5pt !important; line-height: 1.2 !important; background: #f3f4f6 !important; border: 1px solid #000 !important; text-align: center !important;}
+    .print-document-content td { padding: 1.5mm 1mm !important; font-size: 8.5pt !important; line-height: 1.2 !important; border: 1px solid #000 !important; text-align: center !important;}
+    .print-signature-area { flex: 0 0 auto !important; min-height: 0 !important; margin-top: 0 !important; background: #ffffff !important; display: flex !important; flex-direction: column !important; }
+    .print-status-page { width: 210mm !important; max-width: none !important; min-height: 297mm !important; margin: 0 !important; padding: 12mm !important; box-sizing: border-box !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; background: #ffffff !important; overflow: visible !important; }
     .print-status-page table { page-break-inside: auto !important; }
     .print-status-page tr, .print-status-page .print\\:break-inside-avoid { page-break-inside: avoid !important; break-inside: avoid !important; }
   }
